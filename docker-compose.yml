@@ -1,0 +1,30 @@
+services:
+  file-service:
+    build: .
+    networks:
+      - shared-network
+      - filedb-network
+    ports:
+      - "6010:6010"
+    container_name: file-service
+    depends_on:
+      - file-db
+    environment:
+      - SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
+      - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER}
+      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
+      - DOCKER_DEPLOYMENT=true
+  file-db:
+    image: 'postgres:13.1-alpine'
+    container_name: file-db
+    networks:
+      - filedb-network
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+networks:
+  filedb-network:
+    external: true
+  shared-network:
+    external: true
