@@ -4,12 +4,14 @@ import com.strangequark.fileservice.error.ErrorResponse;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+@Service
 public class DownloadService {
     private final Path uploadDir = Paths.get("uploads");
 
