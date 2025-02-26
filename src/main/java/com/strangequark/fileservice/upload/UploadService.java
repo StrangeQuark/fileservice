@@ -19,14 +19,12 @@ public class UploadService {
 
     private MetadataRepository metadataRepository;
 
-    public UploadService() throws IOException {
+    public UploadService(MetadataRepository metadataRepository) throws IOException {
+        this.metadataRepository = metadataRepository;
+
         if (!Files.exists(uploadDir)) {
             Files.createDirectories(uploadDir);
         }
-    }
-
-    public UploadService(MetadataRepository metadataRepository) {
-        this.metadataRepository = metadataRepository;
     }
 
     public ResponseEntity<?> uploadFile(MultipartFile file) {
