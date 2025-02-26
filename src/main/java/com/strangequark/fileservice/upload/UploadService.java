@@ -1,6 +1,8 @@
 package com.strangequark.fileservice.upload;
 
 import com.strangequark.fileservice.error.ErrorResponse;
+import com.strangequark.fileservice.metadata.Metadata;
+import com.strangequark.fileservice.metadata.MetadataRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -15,16 +17,25 @@ import java.nio.file.StandardCopyOption;
 public class UploadService {
     private final Path uploadDir = Paths.get("uploads");
 
+    private MetadataRepository metadataRepository;
+
     public UploadService() throws IOException {
         if (!Files.exists(uploadDir)) {
             Files.createDirectories(uploadDir);
         }
     }
 
+    public UploadService(MetadataRepository metadataRepository) {
+        this.metadataRepository = metadataRepository;
+    }
+
     public ResponseEntity<?> uploadFile(MultipartFile file) {
         try {
             Path filePath = uploadDir.resolve(file.getOriginalFilename());
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+
+            metadataRepository.save(new Metadata(file.getOriginalFilename(), file.getContentType(), file.getSize()));
+
             return ResponseEntity.ok(new UploadResponse("File successfully uploaded"));
         } catch (IOException ex) {
             ex.printStackTrace();
