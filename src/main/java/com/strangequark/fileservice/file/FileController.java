@@ -2,6 +2,7 @@ package com.strangequark.fileservice.file;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -17,5 +18,10 @@ public class FileController {
     @GetMapping("/getAll")
     public ResponseEntity<?> getAllFiles() {
         return fileService.getAllFiles();
+    }
+
+    @GetMapping("/delete/{fileName}")
+    public ResponseEntity<?> deleteFile(@PathVariable String fileName) {
+        return fileService.deleteFile(fileName);
     }
 }
