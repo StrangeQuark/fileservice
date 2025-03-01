@@ -1,12 +1,13 @@
 package com.strangequark.fileservice.file;
 
+import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.List;
 
 @Service
 public class FileService {
@@ -19,14 +20,25 @@ public class FileService {
     }
 
     public ResponseEntity<?> getAllFiles() {
-        String[] files = folder.list();
+        List<Metadata> filesMetadata = metadataRepository.findAllById_Username("testUser");
 
-        return ResponseEntity.ok(files != null ? Arrays.asList(files) : new ArrayList<>());
+        List<String> files = new ArrayList<>();
+
+        for(Metadata m : filesMetadata) {
+            files.add(m.getId().getFileName());
+        }
+
+        return ResponseEntity.ok(files);
     }
 
     public ResponseEntity<?> deleteFile(String fileName) {
-        File file = new File("uploads/" + metadataRepository.findById_FileNameAndId_Username(fileName, "testUser").get().getFileUUID());
+        Metadata metadata = metadataRepository.findById_FileNameAndId_Username(fileName, "testUser").get();
+        File file = new File("uploads/" + metadata.getFileUUID());
 
-        return file.delete() ? ResponseEntity.ok("File successfully deleted") : ResponseEntity.status(400).body("File failed to delete");
+        if (file.delete()) {
+            metadataRepository.delete(metadata);
+            return ResponseEntity.ok("File successfully deleted");
+        }
+        return ResponseEntity.status(400).body("File failed to delete");
     }
 }
