@@ -25,7 +25,7 @@ public class FileService {
     }
 
     public ResponseEntity<?> deleteFile(String fileName) {
-        File file = new File("uploads/" + metadataRepository.findByFileName(fileName).get().getFileUUID());
+        File file = new File("uploads/" + metadataRepository.findById_FileNameAndId_Username(fileName, "testUser").get().getFileUUID());
 
         return file.delete() ? ResponseEntity.ok("File successfully deleted") : ResponseEntity.status(400).body("File failed to delete");
     }

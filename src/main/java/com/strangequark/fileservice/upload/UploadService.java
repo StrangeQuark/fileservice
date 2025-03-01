@@ -2,6 +2,7 @@ package com.strangequark.fileservice.upload;
 
 import com.strangequark.fileservice.error.ErrorResponse;
 import com.strangequark.fileservice.metadata.Metadata;
+import com.strangequark.fileservice.metadata.MetadataId;
 import com.strangequark.fileservice.metadata.MetadataRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -36,7 +37,7 @@ public class UploadService {
             Path filePath = uploadDir.resolve(fileUUID + fileExtension);
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-            metadataRepository.save(new Metadata(fileUUID + fileExtension, file.getOriginalFilename(), file.getContentType(), file.getSize()));
+            metadataRepository.save(new Metadata(new MetadataId(file.getOriginalFilename(), "testUser"), fileUUID + fileExtension, file.getContentType(), file.getSize()));
 
             return ResponseEntity.ok(new UploadResponse("File successfully uploaded"));
         } catch (IOException ex) {

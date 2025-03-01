@@ -30,7 +30,7 @@ public class DownloadService {
 
     public ResponseEntity<?> downloadFile(String fileName) {
         try {
-            Path filePath = uploadDir.resolve(metadataRepository.findByFileName(fileName).get().getFileUUID());
+            Path filePath = uploadDir.resolve(metadataRepository.findById_FileNameAndId_Username(fileName, "testUser").get().getFileUUID());
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
                     .body(new FileSystemResource(filePath));
