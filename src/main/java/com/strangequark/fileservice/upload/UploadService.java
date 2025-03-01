@@ -2,6 +2,7 @@ package com.strangequark.fileservice.upload;
 
 import com.strangequark.fileservice.error.ErrorResponse;
 import com.strangequark.fileservice.metadata.Metadata;
+import com.strangequark.fileservice.metadata.MetadataId;
 import com.strangequark.fileservice.metadata.MetadataRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -12,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.UUID;
 
 @Service
 public class UploadService {
@@ -29,14 +31,16 @@ public class UploadService {
 
     public ResponseEntity<?> uploadFile(MultipartFile file) {
         try {
-            Path filePath = uploadDir.resolve(file.getOriginalFilename());
+            String fileUUID = UUID.randomUUID().toString();
+            String fileExtension = file.getOriginalFilename().substring(file.getOriginalFilename().lastIndexOf("."));
+
+            Path filePath = uploadDir.resolve(fileUUID + fileExtension);
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-            metadataRepository.save(new Metadata(file.getOriginalFilename(), file.getContentType(), file.getSize()));
+            metadataRepository.save(new Metadata(new MetadataId(file.getOriginalFilename(), "testUser"), fileUUID + fileExtension, file.getContentType(), file.getSize()));
 
             return ResponseEntity.ok(new UploadResponse("File successfully uploaded"));
         } catch (IOException ex) {
-            ex.printStackTrace();
             return ResponseEntity.status(500).body(new ErrorResponse("File upload failed"));
         }
     }

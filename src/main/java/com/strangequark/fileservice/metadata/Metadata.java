@@ -8,36 +8,36 @@ public class Metadata {
 
     }
 
-    public Metadata(String fileName, String fileType, Long fileSize) {
-        this.fileName = fileName;
+    public Metadata(MetadataId id, String fileUUID, String fileType, Long fileSize) {
+        this.id = id;
+        this.fileUUID = fileUUID;
         this.fileType = fileType;
         this.fileSize = fileSize;
     }
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @EmbeddedId
+    private MetadataId id;
 
-    private String fileName;
+    private String fileUUID;
 
     private String fileType;
 
     private Long fileSize;
 
-    public Long getId() {
+    public MetadataId getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(MetadataId id) {
         this.id = id;
     }
 
-    public String getFileName() {
-        return fileName;
+    public String getFileUUID() {
+        return fileUUID;
     }
 
-    public void setFileName(String fileName) {
-        this.fileName = fileName;
+    public void setFileUUID(String fileUUID) {
+        this.fileUUID = fileUUID;
     }
 
     public String getFileType() {
