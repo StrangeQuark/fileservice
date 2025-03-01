@@ -1,6 +1,8 @@
 package com.strangequark.fileservice.download;
 
 import com.strangequark.fileservice.error.ErrorResponse;
+import com.strangequark.fileservice.metadata.Metadata;
+import com.strangequark.fileservice.metadata.MetadataRepository;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -10,12 +12,17 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.NoSuchElementException;
 
 @Service
 public class DownloadService {
     private final Path uploadDir = Paths.get("uploads");
 
-    public DownloadService() throws IOException {
+    private final MetadataRepository metadataRepository;
+
+    public DownloadService(MetadataRepository metadataRepository) throws IOException {
+        this.metadataRepository = metadataRepository;
+
         if (!Files.exists(uploadDir)) {
             Files.createDirectories(uploadDir);
         }
@@ -23,12 +30,13 @@ public class DownloadService {
 
     public ResponseEntity<?> downloadFile(String fileName) {
         try {
-            Path filePath = uploadDir.resolve(fileName);
+            Path filePath = uploadDir.resolve(metadataRepository.findByFileName(fileName).get().getFileUUID());
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
                     .body(new FileSystemResource(filePath));
+        } catch (NoSuchElementException ex) {
+            return ResponseEntity.status(404).body(new ErrorResponse("File not found"));
         } catch (Exception ex) {
-            ex.printStackTrace();
             return ResponseEntity.status(500).body(new ErrorResponse("File download failed"));
         }
     }
