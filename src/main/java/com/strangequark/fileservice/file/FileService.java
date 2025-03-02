@@ -8,11 +8,10 @@ import org.springframework.stereotype.Service;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @Service
 public class FileService {
-    private final File folder = new File("uploads/");
-
     private final MetadataRepository metadataRepository;
 
     public FileService(MetadataRepository metadataRepository) {
@@ -32,13 +31,17 @@ public class FileService {
     }
 
     public ResponseEntity<?> deleteFile(String fileName) {
-        Metadata metadata = metadataRepository.findById_FileNameAndId_Username(fileName, "testUser").get();
-        File file = new File("uploads/" + metadata.getFileUUID());
+        try {
+            Metadata metadata = metadataRepository.findById_FileNameAndId_Username(fileName, "testUser").get();
+            File file = new File("uploads/" + metadata.getFileUUID());
 
-        if (file.delete()) {
-            metadataRepository.delete(metadata);
-            return ResponseEntity.ok("File successfully deleted");
+            if (file.delete()) {
+                metadataRepository.delete(metadata);
+                return ResponseEntity.ok("File successfully deleted");
+            }
+            return ResponseEntity.status(400).body("File failed to delete");
+        } catch (NoSuchElementException ex) {
+            return ResponseEntity.status(404).body("File does not exist");
         }
-        return ResponseEntity.status(400).body("File failed to delete");
     }
 }
