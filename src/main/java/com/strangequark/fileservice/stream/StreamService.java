@@ -1,6 +1,7 @@
 package com.strangequark.fileservice.stream;
 
 import com.strangequark.fileservice.error.ErrorResponse;
+import com.strangequark.fileservice.metadata.MetadataRepository;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -15,7 +16,11 @@ import java.nio.file.Paths;
 public class StreamService {
     private final Path uploadDir = Paths.get("uploads");
 
-    public StreamService() throws IOException {
+    private final MetadataRepository metadataRepository;
+
+    public StreamService(MetadataRepository metadataRepository) throws IOException {
+        this.metadataRepository = metadataRepository;
+
         if (!Files.exists(uploadDir)) {
             Files.createDirectories(uploadDir);
         }
@@ -23,12 +28,11 @@ public class StreamService {
 
     public ResponseEntity<?> streamFile(String fileName) {
         try {
-            Path filePath = uploadDir.resolve(fileName);
+            Path filePath = uploadDir.resolve(metadataRepository.findById_FileNameAndId_Username(fileName, "testUser").get().getFileUUID());
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
                     .body(new FileSystemResource(filePath));
         } catch (Exception ex) {
-            ex.printStackTrace();
             return ResponseEntity.status(500).body(new ErrorResponse("File download failed"));
         }
     }
