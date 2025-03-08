@@ -15,7 +15,7 @@ public class StreamController {
     }
 
     @GetMapping("/{fileName}")
-    public ResponseEntity<?> streamFile(@PathVariable String fileName) {
-        return streamService.streamFile(fileName);
+    public ResponseEntity<?> streamFile(@PathVariable String fileName, @RequestHeader(value = "Range", required = false) String rangeHeader) {
+        return streamService.streamFile(fileName, rangeHeader);
     }
 }
