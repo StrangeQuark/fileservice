@@ -29,7 +29,6 @@ public class StreamService {
 
     public ResponseEntity<?> streamFile(String fileName, String rangeHeader) {
         try {
-            // Find file path using metadata repository
             Optional<String> fileUUID = metadataRepository
                     .findById_FileNameAndId_Username(fileName, "testUser")
                     .map(metadata -> metadata.getFileUUID());
@@ -42,15 +41,14 @@ public class StreamService {
             FileSystemResource resource = new FileSystemResource(filePath);
             long fileSize = Files.size(filePath);
 
-            // Set the proper Content-Type
-            MediaType mediaType = MediaTypeFactory.getMediaType(filePath.getFileName().toString())
+            MediaType mediaType = MediaTypeFactory.getMediaType(filePath.toString())
                     .orElse(MediaType.APPLICATION_OCTET_STREAM);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(mediaType);
             headers.set("Accept-Ranges", "bytes");
+            headers.setContentDisposition(ContentDisposition.inline().filename(fileName).build());
 
-            // Handle Byte-Range Requests for Streaming
             if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
                 String[] ranges = rangeHeader.replace("bytes=", "").split("-");
                 long start = Long.parseLong(ranges[0]);
@@ -75,7 +73,6 @@ public class StreamService {
                         .body(data);
             }
 
-            // If no range header, return the whole file
             headers.setContentLength(fileSize);
             return ResponseEntity.ok()
                     .headers(headers)
