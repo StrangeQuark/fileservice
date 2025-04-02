@@ -17,11 +17,12 @@ public abstract class BaseServiceTest {
     @Autowired
     public MetadataRepository metadataRepository;
     public MockMultipartFile mockMultipartFile;
-    private final Path uploadDir = Paths.get("uploads");
+    public final String fileName = "testFile.txt";
+    public final Path uploadDir = Paths.get("uploads");
 
     @BeforeEach
     void setup() {
-        mockMultipartFile = new MockMultipartFile("testFile", "testFile.txt",
+        mockMultipartFile = new MockMultipartFile("testFile", fileName,
             "text/plain", "Test file data".getBytes());
     }
 
