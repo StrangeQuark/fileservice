@@ -1,7 +1,6 @@
 package com.strangequark.fileservice.download;
 
 import com.strangequark.fileservice.error.ErrorResponse;
-import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpHeaders;
