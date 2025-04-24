@@ -1,6 +1,6 @@
 package com.strangequark.fileservice.metadata;
-import jakarta.persistence.*;
 
+import jakarta.persistence.*;
 
 @Entity
 public class Metadata {
