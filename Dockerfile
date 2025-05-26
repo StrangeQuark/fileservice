@@ -1,16 +1,25 @@
-FROM eclipse-temurin:21-alpine
+# Stage 1: Build the application
+FROM eclipse-temurin:21-alpine AS builder
 
 WORKDIR /fileservice
 
 COPY .mvn/ .mvn
 COPY mvnw pom.xml ./
-RUN chmod +x mvnw
-RUN sed -i 's/\r$//' mvnw
+RUN chmod +x mvnw && sed -i 's/\r$//' mvnw
 RUN ./mvnw dependency:go-offline
 
 COPY src ./src
+RUN ./mvnw clean package -DskipTests
 
-ENV PORT=6010
+# Stage 2: Create minimal runtime image
+FROM eclipse-temurin:21-alpine
+
+WORKDIR /fileservice
+
+COPY --from=builder /fileservice/target/*.jar fileservice.jar
+
+ENV JAVA_OPTS=""
+
 EXPOSE 6010
 
-CMD ["./mvnw", "spring-boot:run"]
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar fileservice.jar"]
