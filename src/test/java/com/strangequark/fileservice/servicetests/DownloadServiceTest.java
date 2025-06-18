@@ -13,8 +13,6 @@ public class DownloadServiceTest extends BaseServiceTest {
 
     @Test
     void downloadFileTest() {
-        uploadService.uploadFile(mockMultipartFile);
-
         ResponseEntity<?> response = downloadService.downloadFile(fileName);
 
         Assertions.assertEquals(200, response.getStatusCode().value());

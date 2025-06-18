@@ -35,6 +35,8 @@ public abstract class BaseServiceTest {
     void setup() {
         mockMultipartFile = new MockMultipartFile("testFile", fileName,
             "text/plain", "Test file data".getBytes());
+
+        uploadService.uploadFile(mockMultipartFile);
     }
 
     @AfterEach
