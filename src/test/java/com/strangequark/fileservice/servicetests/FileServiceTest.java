@@ -13,8 +13,6 @@ public class FileServiceTest extends BaseServiceTest {
 
     @Test
     void getAllFilesTest() {
-        uploadService.uploadFile(mockMultipartFile);
-
         ResponseEntity<?> response = fileService.getAllFiles();
 
         Assertions.assertEquals(200, response.getStatusCode().value());
@@ -22,8 +20,6 @@ public class FileServiceTest extends BaseServiceTest {
 
     @Test
     void deleteFileTest() {
-        uploadService.uploadFile(mockMultipartFile);
-
         ResponseEntity<?> response = fileService.deleteFile("testFile.txt");
 
         Assertions.assertEquals(200, response.getStatusCode().value());
