@@ -13,7 +13,7 @@ public class DownloadController {
     }
 
     @GetMapping("/{fileName}")
-    public ResponseEntity<?> downloadFile(@PathVariable String fileName) {
-        return downloadService.downloadFile(fileName);
+    public ResponseEntity<?> downloadFile(@PathVariable String fileName, @PathVariable String collectionName) {
+        return downloadService.downloadFile(fileName, collectionName);
     }
 }

@@ -16,8 +16,8 @@ public class FileController {
     }
 
     @GetMapping("/getAll")
-    public ResponseEntity<?> getAllFiles() {
-        return fileService.getAllFiles();
+    public ResponseEntity<?> getAllFiles(@PathVariable String collectionName) {
+        return fileService.getAllFiles(collectionName);
     }
 
     @GetMapping("/delete/{fileName}")
