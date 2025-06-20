@@ -1,5 +1,7 @@
 package com.strangequark.fileservice.download;
 
+import com.strangequark.fileservice.collection.Collection;
+import com.strangequark.fileservice.collection.CollectionRepository;
 import com.strangequark.fileservice.error.ErrorResponse;
 import com.strangequark.fileservice.metadata.MetadataRepository;
 import org.slf4j.Logger;
@@ -21,19 +23,24 @@ public class DownloadService {
     private final Path uploadDir = Paths.get("uploads");
 
     private final MetadataRepository metadataRepository;
+    private final CollectionRepository collectionRepository;
 
-    public DownloadService(MetadataRepository metadataRepository) throws IOException {
+    public DownloadService(MetadataRepository metadataRepository, CollectionRepository collectionRepository) throws IOException {
         this.metadataRepository = metadataRepository;
+        this.collectionRepository = collectionRepository;
 
         if (!Files.exists(uploadDir)) {
             Files.createDirectories(uploadDir);
         }
     }
 
-    public ResponseEntity<?> downloadFile(String fileName) {
+    public ResponseEntity<?> downloadFile(String fileName, String collectionName) {
         LOGGER.info("Attempting to download file");
         try {
-            Path filePath = uploadDir.resolve(metadataRepository.findById_FileNameAndId_Username(fileName, "testUser").get().getFileUUID());
+            Collection collection = collectionRepository.findByName(collectionName)
+                    .orElseThrow(() -> new RuntimeException("Collection not found"));
+
+            Path filePath = uploadDir.resolve(metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getFileUUID());
 
             LOGGER.info("File successfully sent to user");
             return ResponseEntity.ok()
@@ -43,7 +50,12 @@ public class DownloadService {
             LOGGER.error("File not found");
             LOGGER.error(ex.getMessage());
             return ResponseEntity.status(404).body(new ErrorResponse("File not found"));
-        } catch (Exception ex) {
+        } catch (RuntimeException ex) {
+            LOGGER.error("File download failed - runtime exception");
+            LOGGER.error(ex.getMessage());
+            return ResponseEntity.status(500).body(new ErrorResponse("File download failed - runtime exception"));
+        }
+        catch (Exception ex) {
             LOGGER.error("File download failed");
             LOGGER.error(ex.getMessage());
             return ResponseEntity.status(500).body(new ErrorResponse("File download failed"));

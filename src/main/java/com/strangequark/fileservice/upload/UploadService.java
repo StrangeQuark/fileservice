@@ -1,8 +1,9 @@
 package com.strangequark.fileservice.upload;
 
+import com.strangequark.fileservice.collection.Collection;
+import com.strangequark.fileservice.collection.CollectionRepository;
 import com.strangequark.fileservice.error.ErrorResponse;
 import com.strangequark.fileservice.metadata.Metadata;
-import com.strangequark.fileservice.metadata.MetadataId;
 import com.strangequark.fileservice.metadata.MetadataRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,26 +24,31 @@ public class UploadService {
     private final Path uploadDir = Paths.get("uploads");
 
     private MetadataRepository metadataRepository;
+    private CollectionRepository collectionRepository;
 
-    public UploadService(MetadataRepository metadataRepository) throws IOException {
+    public UploadService(MetadataRepository metadataRepository, CollectionRepository collectionRepository) throws IOException {
         this.metadataRepository = metadataRepository;
+        this.collectionRepository = collectionRepository;
 
         if (!Files.exists(uploadDir)) {
             Files.createDirectories(uploadDir);
         }
     }
 
-    public ResponseEntity<?> uploadFile(MultipartFile file) {
+    public ResponseEntity<?> uploadFile(MultipartFile file, String collectionName) {
         LOGGER.info("Attempting to upload file");
 
         try {
+            Collection collection = collectionRepository.findByName(collectionName)
+                    .orElseThrow(() -> new RuntimeException("Collection not found"));
+
             String fileUUID = UUID.randomUUID().toString();
             String fileExtension = file.getOriginalFilename().substring(file.getOriginalFilename().lastIndexOf("."));
 
             Path filePath = uploadDir.resolve(fileUUID + fileExtension);
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-            metadataRepository.save(new Metadata(new MetadataId(file.getOriginalFilename(), "testUser"), fileUUID + fileExtension, file.getContentType(), file.getSize()));
+            metadataRepository.save(new Metadata(collection, file.getOriginalFilename(), fileUUID + fileExtension, file.getContentType(), file.getSize()));
 
             LOGGER.info("File successfully uploaded");
             return ResponseEntity.ok(new UploadResponse("File successfully uploaded"));

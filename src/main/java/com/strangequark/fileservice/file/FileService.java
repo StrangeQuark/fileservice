@@ -1,5 +1,8 @@
 package com.strangequark.fileservice.file;
 
+import com.strangequark.fileservice.collection.Collection;
+import com.strangequark.fileservice.collection.CollectionRepository;
+import com.strangequark.fileservice.error.ErrorResponse;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
 import org.slf4j.Logger;
@@ -15,31 +18,47 @@ import java.util.NoSuchElementException;
 @Service
 public class FileService {
     private static final Logger LOGGER = LoggerFactory.getLogger(FileService.class);
-    private final MetadataRepository metadataRepository;
 
-    public FileService(MetadataRepository metadataRepository) {
+    private final MetadataRepository metadataRepository;
+    private final CollectionRepository collectionRepository;
+
+    public FileService(MetadataRepository metadataRepository, CollectionRepository collectionRepository) {
         this.metadataRepository = metadataRepository;
+        this.collectionRepository = collectionRepository;
     }
 
-    public ResponseEntity<?> getAllFiles() {
+    public ResponseEntity<?> getAllFiles(String collectionName) {
         LOGGER.info("Attempting to get all files");
 
-        List<Metadata> filesMetadata = metadataRepository.findAllById_Username("testUser");
+        try {
+            Collection collection = collectionRepository.findByName(collectionName)
+                    .orElseThrow(() -> new RuntimeException("Collection not found when getting all files"));
 
-        List<String> files = new ArrayList<>();
+            List<Metadata> filesMetadata = metadataRepository.findByCollectionId(collection.getId());
 
-        for(Metadata m : filesMetadata) {
-            files.add(m.getId().getFileName());
+            List<String> files = new ArrayList<>();
+
+            for (Metadata m : filesMetadata) {
+                files.add(m.getFileName());
+            }
+
+            LOGGER.info("All files successfully retrieved");
+            return ResponseEntity.ok(files);
+        } catch (RuntimeException ex) {
+            LOGGER.error("Collection not found when getting all files");
+            LOGGER.error(ex.getMessage());
+            return ResponseEntity.status(401).body(new ErrorResponse("Collection not found when getting all files"));
         }
-
-        LOGGER.info("All files successfully retrieved");
-        return ResponseEntity.ok(files);
     }
 
-    public ResponseEntity<?> deleteFile(String fileName) {
+    public ResponseEntity<?> deleteFile(String fileName, String collectionName) {
         LOGGER.info("Attempting to delete file");
+
         try {
-            Metadata metadata = metadataRepository.findById_FileNameAndId_Username(fileName, "testUser").get();
+            Collection collection = collectionRepository.findByName(collectionName)
+                    .orElseThrow(() -> new RuntimeException("Collection not found when deleting file"));
+
+            Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
             File file = new File("uploads/" + metadata.getFileUUID());
 
             if (file.delete()) {
@@ -54,6 +73,10 @@ public class FileService {
             LOGGER.error("File does not exist");
             LOGGER.error(ex.getMessage());
             return ResponseEntity.status(404).body("File does not exist");
+        } catch (RuntimeException ex) {
+            LOGGER.error("Collection not found when deleting file");
+            LOGGER.error(ex.getMessage());
+            return ResponseEntity.status(401).body(new ErrorResponse("Collection not found when deleting file"));
         }
     }
 }

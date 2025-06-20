@@ -1,22 +1,36 @@
 package com.strangequark.fileservice.metadata;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.strangequark.fileservice.collection.Collection;
 import jakarta.persistence.*;
 
 @Entity
+@Table(name = "metadata")
 public class Metadata {
+
     public Metadata() {
 
     }
 
-    public Metadata(MetadataId id, String fileUUID, String fileType, Long fileSize) {
-        this.id = id;
+    public Metadata(Collection collection, String fileName, String fileUUID, String fileType, Long fileSize) {
+        this.collection = collection;
+        this.fileName = fileName;
         this.fileUUID = fileUUID;
         this.fileType = fileType;
         this.fileSize = fileSize;
     }
 
-    @EmbeddedId
-    private MetadataId id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne
+    @JoinColumn(name = "collection_id", nullable = false)
+    @JsonBackReference
+    private Collection collection;
+
+    @Column(name = "file_name")
+    private String fileName;
 
     private String fileUUID;
 
@@ -24,11 +38,19 @@ public class Metadata {
 
     private Long fileSize;
 
-    public MetadataId getId() {
+    public String getFileName() {
+        return fileName;
+    }
+
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
+    }
+
+    public Long getId() {
         return id;
     }
 
-    public void setId(MetadataId id) {
+    public void setId(Long id) {
         this.id = id;
     }
 

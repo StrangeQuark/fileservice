@@ -1,5 +1,6 @@
 package com.strangequark.fileservice.servicetests;
 
+import com.strangequark.fileservice.collection.CollectionRepository;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
 import com.strangequark.fileservice.upload.UploadService;
@@ -24,6 +25,10 @@ public abstract class BaseServiceTest {
 
     @Autowired
     public MetadataRepository metadataRepository;
+    @Autowired
+    public CollectionRepository collectionRepository;
+
+
     public MockMultipartFile mockMultipartFile;
     public final String fileName = "testFile.txt";
     public final Path uploadDir = Paths.get("uploads");
