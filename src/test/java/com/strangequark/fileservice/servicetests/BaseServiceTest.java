@@ -2,9 +2,9 @@ package com.strangequark.fileservice.servicetests;
 
 import com.strangequark.fileservice.collection.Collection;
 import com.strangequark.fileservice.collection.CollectionRepository;
+import com.strangequark.fileservice.file.FileService;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
-import com.strangequark.fileservice.upload.UploadService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.TestInstance;
@@ -36,7 +36,7 @@ public abstract class BaseServiceTest {
     public final Path uploadDir = Paths.get("uploads");
 
     @Autowired
-    public UploadService uploadService;
+    public FileService fileService;
 
     @BeforeEach
     void setup() {
@@ -47,7 +47,7 @@ public abstract class BaseServiceTest {
         mockMultipartFile = new MockMultipartFile("testFile", fileName,
             "text/plain", "Test file data".getBytes());
 
-        uploadService.uploadFile(mockMultipartFile, collectionName);
+        fileService.uploadFile(mockMultipartFile, collectionName);
     }
 
     @AfterEach
