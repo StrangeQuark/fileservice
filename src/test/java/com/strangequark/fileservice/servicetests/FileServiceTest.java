@@ -8,12 +8,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.File;
-import java.util.Optional;
 
 public class FileServiceTest extends BaseServiceTest {
 
     @Test
     void getAllFilesTest() {
+        LOGGER.info("Begin getAllFilesTest");
+
         ResponseEntity<?> response = fileService.getAllFiles(collectionName);
 
         Assertions.assertEquals(200, response.getStatusCode().value());
@@ -21,6 +22,8 @@ public class FileServiceTest extends BaseServiceTest {
 
     @Test
     void deleteFileTest() {
+        LOGGER.info("Begin deleteFileTest");
+
         ResponseEntity<?> response = fileService.deleteFile(collectionName, fileName);
 
         Assertions.assertEquals(200, response.getStatusCode().value());
@@ -28,6 +31,8 @@ public class FileServiceTest extends BaseServiceTest {
 
     @Test
     void downloadFileTest() {
+        LOGGER.info("Begin deleteFileTest");
+
         ResponseEntity<?> response = fileService.downloadFile(collectionName, fileName);
 
         Assertions.assertEquals(200, response.getStatusCode().value());
@@ -35,6 +40,8 @@ public class FileServiceTest extends BaseServiceTest {
 
     @Test
     void streamFileTest() {
+        LOGGER.info("Begin streamFileTest");
+
         ResponseEntity<?> response = fileService.streamFile(collectionName, fileName, "");
 
         Assertions.assertEquals(200, response.getStatusCode().value());
@@ -42,6 +49,8 @@ public class FileServiceTest extends BaseServiceTest {
 
     @Test
     void uploadFileTest() {
+        LOGGER.info("Begin uploadFileTest");
+
         String testFileName = "uploadTestFile.txt";
 
         ResponseEntity<?> response = fileService.uploadFile(new MockMultipartFile("uploadTestFile",
@@ -50,11 +59,33 @@ public class FileServiceTest extends BaseServiceTest {
         Assertions.assertEquals(200, response.getStatusCode().value());
         Assertions.assertEquals("File successfully uploaded", ((UploadResponse) response.getBody()).getMessage());
 
+        LOGGER.info("File successfully uploaded");
+
+        //
+        // Teardown phase
+        //
+
         Metadata meta = metadataRepository.findByCollectionIdAndFileName(collection.getId(), testFileName)
-                .orElseThrow(() -> new RuntimeException("Unable to find metadata"));
+                .orElseThrow(() -> {
+                    LOGGER.error("Unable to find metadata in uploadFileTest teardown phase");
+                    return new RuntimeException("Unable to find metadata");
+                });
 
         File file = uploadDir.resolve(meta.getFileUUID()).toFile();
-        file.delete();
         metadataRepository.delete(meta);
+
+        Assertions.assertTrue(file.delete());
+        LOGGER.info("uploadFileTest cleanup successful");
+    }
+
+    @Test
+    void createNewCollectionTest() {
+        LOGGER.info("Begin createNewCollectionTest");
+
+        String testCollectionName = "testCollectionName";
+
+        ResponseEntity<?> response = fileService.createNewCollection(testCollectionName);
+
+        Assertions.assertEquals(200, response.getStatusCode().value());
     }
 }

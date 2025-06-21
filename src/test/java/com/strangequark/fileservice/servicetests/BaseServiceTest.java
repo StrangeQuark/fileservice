@@ -8,6 +8,8 @@ import com.strangequark.fileservice.metadata.MetadataRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.TestInstance;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mock.web.MockMultipartFile;
@@ -23,6 +25,7 @@ import java.util.UUID;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ActiveProfiles("test")
 public abstract class BaseServiceTest {
+    Logger LOGGER = LoggerFactory.getLogger(BaseServiceTest.class);
 
     @Autowired
     public MetadataRepository metadataRepository;
@@ -40,33 +43,42 @@ public abstract class BaseServiceTest {
 
     @BeforeEach
     void setup() {
+        LOGGER.info("Attempting test setup");
+
         collectionName = "testCollection_" + UUID.randomUUID();
         collection = new Collection(collectionName);
         collectionRepository.save(collection);
+        LOGGER.info("Test collection successfully created");
 
         mockMultipartFile = new MockMultipartFile("testFile", fileName,
             "text/plain", "Test file data".getBytes());
 
         fileService.uploadFile(mockMultipartFile, collectionName);
+        LOGGER.info("Mock file successfully uploaded, setup complete");
     }
 
     @AfterEach
     void teardown() {
+        LOGGER.info("Attempting test teardown");
         try {
             Optional<Metadata> metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName);
             metadata.ifPresent(meta -> {
                 File file = uploadDir.resolve(meta.getFileUUID()).toFile();
                 file.delete();
                 metadataRepository.deleteAll();
+                LOGGER.info("File and metadata successful teardown");
             });
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (Exception ex) {
+            LOGGER.error("Exception when attempting to clean up metadata repository and delete file during testing");
+            LOGGER.error(ex.getMessage());
         }
 
         try {
             collectionRepository.deleteAll();
-        } catch (Exception e) {
-            e.printStackTrace();
+            LOGGER.info("Collections successful teardown");
+        } catch (Exception ex) {
+            LOGGER.error("Exception when attempting to clean up collection repository during testing");
+            LOGGER.error(ex.getMessage());
         }
     }
 
