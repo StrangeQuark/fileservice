@@ -3,8 +3,6 @@ package com.strangequark.fileservice.stream;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import org.springframework.web.bind.annotation.GetMapping;
-
 @RestController
 @RequestMapping("/stream")
 public class StreamController {
@@ -15,7 +13,7 @@ public class StreamController {
     }
 
     @GetMapping("/{fileName}")
-    public ResponseEntity<?> streamFile(@PathVariable String fileName, @RequestHeader(value = "Range", required = false) String rangeHeader) {
-        return streamService.streamFile(fileName, rangeHeader);
+    public ResponseEntity<?> streamFile(@PathVariable String collectionName, @PathVariable String fileName, @RequestHeader(value = "Range", required = false) String rangeHeader) {
+        return streamService.streamFile(collectionName, fileName, rangeHeader);
     }
 }

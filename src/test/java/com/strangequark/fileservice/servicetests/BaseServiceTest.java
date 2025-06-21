@@ -1,5 +1,6 @@
 package com.strangequark.fileservice.servicetests;
 
+import com.strangequark.fileservice.collection.Collection;
 import com.strangequark.fileservice.collection.CollectionRepository;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
@@ -15,8 +16,8 @@ import org.springframework.test.context.ActiveProfiles;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.UUID;
 
 @SpringBootTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -28,8 +29,9 @@ public abstract class BaseServiceTest {
     @Autowired
     public CollectionRepository collectionRepository;
 
-
+    public Collection collection;
     public MockMultipartFile mockMultipartFile;
+    public String collectionName;
     public final String fileName = "testFile.txt";
     public final Path uploadDir = Paths.get("uploads");
 
@@ -38,22 +40,34 @@ public abstract class BaseServiceTest {
 
     @BeforeEach
     void setup() {
+        collectionName = "testCollection_" + UUID.randomUUID();
+        collection = new Collection(collectionName);
+        collectionRepository.save(collection);
+
         mockMultipartFile = new MockMultipartFile("testFile", fileName,
             "text/plain", "Test file data".getBytes());
 
-        uploadService.uploadFile(mockMultipartFile);
+        uploadService.uploadFile(mockMultipartFile, collectionName);
     }
 
     @AfterEach
     void teardown() {
-        Optional<Metadata> metadata = metadataRepository.findById_FileNameAndId_Username("testFile.txt", "testUser");
+        try {
+            Optional<Metadata> metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName);
+            metadata.ifPresent(meta -> {
+                File file = uploadDir.resolve(meta.getFileUUID()).toFile();
+                file.delete();
+                metadataRepository.delete(meta);
+            });
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
 
         try {
-            File file = uploadDir.resolve(metadata.get().getFileUUID()).toFile();
-            file.delete();
-            metadataRepository.delete(metadata.get());
-        } catch (NoSuchElementException ex) {
-            ex.printStackTrace();
+            collectionRepository.deleteById(collection.getId());
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
+
 }

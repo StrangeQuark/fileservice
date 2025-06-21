@@ -13,7 +13,7 @@ public class StreamServiceTest extends BaseServiceTest {
 
     @Test
     void streamFileTest() {
-        ResponseEntity<?> response = streamService.streamFile(fileName, "");
+        ResponseEntity<?> response = streamService.streamFile(collectionName, fileName, "");
 
         Assertions.assertEquals(200, response.getStatusCode().value());
     }

@@ -11,7 +11,7 @@ public class UploadServiceTest extends BaseServiceTest {
     @Test
     void uploadFileTest() {
         ResponseEntity<?> response = uploadService.uploadFile(new MockMultipartFile("uploadTestFile",
-                "uploadTestFile.txt", "text/plain", "Upload test file data".getBytes()));
+                "uploadTestFile.txt", "text/plain", "Upload test file data".getBytes()), collectionName);
 
         Assertions.assertEquals(200, response.getStatusCode().value());
         Assertions.assertEquals("File successfully uploaded", ((UploadResponse) response.getBody()).getMessage());

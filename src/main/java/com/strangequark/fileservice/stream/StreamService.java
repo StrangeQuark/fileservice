@@ -1,5 +1,7 @@
 package com.strangequark.fileservice.stream;
 
+import com.strangequark.fileservice.collection.Collection;
+import com.strangequark.fileservice.collection.CollectionRepository;
 import com.strangequark.fileservice.error.ErrorResponse;
 import com.strangequark.fileservice.metadata.MetadataRepository;
 import org.slf4j.Logger;
@@ -7,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -21,21 +24,27 @@ public class StreamService {
     private final Path uploadDir = Paths.get("uploads");
 
     private final MetadataRepository metadataRepository;
+    private final CollectionRepository collectionRepository;
 
-    public StreamService(MetadataRepository metadataRepository) throws IOException {
+    public StreamService(MetadataRepository metadataRepository, CollectionRepository collectionRepository) throws IOException {
         this.metadataRepository = metadataRepository;
+        this.collectionRepository = collectionRepository;
 
         if (!Files.exists(uploadDir)) {
             Files.createDirectories(uploadDir);
         }
     }
 
-    public ResponseEntity<?> streamFile(String fileName, String rangeHeader) {
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> streamFile(String collectionName, String fileName, String rangeHeader) {
         LOGGER.info("Attempting to stream file");
 
         try {
+            Collection collection = collectionRepository.findByName(collectionName)
+                    .orElseThrow(() -> new RuntimeException("Unable to locate collection when streaming file"));
+
             Optional<String> fileUUID = metadataRepository
-                    .findById_FileNameAndId_Username(fileName, "testUser")
+                    .findByCollectionIdAndFileName(collection.getId(), fileName)
                     .map(metadata -> metadata.getFileUUID());
 
             if (fileUUID.isEmpty()) {
@@ -91,6 +100,10 @@ public class StreamService {
             LOGGER.error("File streaming failed");
             LOGGER.error(ex.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ErrorResponse("File streaming failed"));
+        } catch (RuntimeException ex) {
+            LOGGER.error("Unable to locate collection when streaming file");
+            LOGGER.error(ex.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ErrorResponse("File streaming failed - runtime exception"));
         }
     }
 }

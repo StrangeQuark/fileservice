@@ -21,7 +21,7 @@ public class FileController {
     }
 
     @GetMapping("/delete/{fileName}")
-    public ResponseEntity<?> deleteFile(@PathVariable String fileName) {
-        return fileService.deleteFile(fileName);
+    public ResponseEntity<?> deleteFile(@PathVariable String collectionName, @PathVariable String fileName) {
+        return fileService.deleteFile(collectionName, fileName);
     }
 }
