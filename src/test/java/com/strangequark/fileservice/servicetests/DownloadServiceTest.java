@@ -13,7 +13,7 @@ public class DownloadServiceTest extends BaseServiceTest {
 
     @Test
     void downloadFileTest() {
-        ResponseEntity<?> response = downloadService.downloadFile(fileName, collectionName);
+        ResponseEntity<?> response = downloadService.downloadFile(collectionName, fileName);
 
         Assertions.assertEquals(200, response.getStatusCode().value());
     }

@@ -55,15 +55,15 @@ public class MetadataRepositoryTest {
     }
 
     @Test
-    void findById_FileNameAndId_UsernameTest() {
-        Optional<Metadata> metadata = metadataRepository.findById_FileNameAndId_Username("test.file", "testUser");
+    void findByCollectionIdAndFileNameTest() {
+        Optional<Metadata> metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), "testFile.file");
 
         Assertions.assertTrue(metadata.isPresent());
     }
 
     @Test
-    void findAllById_UsernameTest() {
-        List<Metadata> metadata = metadataRepository.findAllById_Username("testUser");
+    void findByCollectionIdTest() {
+        List<Metadata> metadata = metadataRepository.findByCollectionId(collection.getId());
 
         Assertions.assertEquals(2, metadata.size());
         Assertions.assertEquals("testFile.file", metadata.get(0).getFileName());

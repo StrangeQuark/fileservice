@@ -10,6 +10,7 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -34,7 +35,8 @@ public class DownloadService {
         }
     }
 
-    public ResponseEntity<?> downloadFile(String fileName, String collectionName) {
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> downloadFile(String collectionName, String fileName) {
         LOGGER.info("Attempting to download file");
         try {
             Collection collection = collectionRepository.findByName(collectionName)

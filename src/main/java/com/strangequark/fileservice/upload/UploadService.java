@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -35,6 +36,7 @@ public class UploadService {
         }
     }
 
+    @Transactional(readOnly = false)
     public ResponseEntity<?> uploadFile(MultipartFile file, String collectionName) {
         LOGGER.info("Attempting to upload file");
 

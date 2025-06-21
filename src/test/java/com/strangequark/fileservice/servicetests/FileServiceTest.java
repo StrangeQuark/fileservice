@@ -13,14 +13,14 @@ public class FileServiceTest extends BaseServiceTest {
 
     @Test
     void getAllFilesTest() {
-        ResponseEntity<?> response = fileService.getAllFiles();
+        ResponseEntity<?> response = fileService.getAllFiles(collectionName);
 
         Assertions.assertEquals(200, response.getStatusCode().value());
     }
 
     @Test
     void deleteFileTest() {
-        ResponseEntity<?> response = fileService.deleteFile("testFile.txt");
+        ResponseEntity<?> response = fileService.deleteFile(collectionName, fileName);
 
         Assertions.assertEquals(200, response.getStatusCode().value());
     }

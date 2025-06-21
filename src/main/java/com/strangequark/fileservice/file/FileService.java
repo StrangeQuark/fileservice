@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -27,6 +28,7 @@ public class FileService {
         this.collectionRepository = collectionRepository;
     }
 
+    @Transactional(readOnly = true)
     public ResponseEntity<?> getAllFiles(String collectionName) {
         LOGGER.info("Attempting to get all files");
 
@@ -51,7 +53,8 @@ public class FileService {
         }
     }
 
-    public ResponseEntity<?> deleteFile(String fileName, String collectionName) {
+    @Transactional(readOnly = false)
+    public ResponseEntity<?> deleteFile(String collectionName, String fileName) {
         LOGGER.info("Attempting to delete file");
 
         try {
