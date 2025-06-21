@@ -1,4 +1,4 @@
-package com.strangequark.fileservice.error;
+package com.strangequark.fileservice.response;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 
