@@ -57,14 +57,14 @@ public abstract class BaseServiceTest {
             metadata.ifPresent(meta -> {
                 File file = uploadDir.resolve(meta.getFileUUID()).toFile();
                 file.delete();
-                metadataRepository.delete(meta);
+                metadataRepository.deleteAll();
             });
         } catch (Exception e) {
             e.printStackTrace();
         }
 
         try {
-            collectionRepository.deleteById(collection.getId());
+            collectionRepository.deleteAll();
         } catch (Exception e) {
             e.printStackTrace();
         }
