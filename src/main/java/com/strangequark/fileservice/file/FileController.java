@@ -37,4 +37,9 @@ public class FileController {
     public ResponseEntity<?> uploadFile(@RequestParam("file") MultipartFile file, @PathVariable String collectionName) {
         return fileService.uploadFile(file, collectionName);
     }
+
+    @PostMapping("new-collection")
+    public ResponseEntity<?> createNewCollection(@PathVariable String collectionName) {
+        return fileService.createNewCollection(collectionName);
+    }
 }

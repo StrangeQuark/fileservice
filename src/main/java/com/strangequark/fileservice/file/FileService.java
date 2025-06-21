@@ -224,4 +224,23 @@ public class FileService {
             return ResponseEntity.status(500).body(new ErrorResponse("File upload failed, invalid file extension"));
         }
     }
+
+    @Transactional
+    public ResponseEntity<?> createNewCollection(String collectionName) {
+        LOGGER.info("Attempting to create new collection");
+
+        try {
+            if(collectionRepository.existsByName(collectionName))
+                throw new RuntimeException("Collection with this name already exists");
+
+            collectionRepository.save(new Collection(collectionName));
+
+            LOGGER.info("New collection successfully created");
+            return ResponseEntity.ok("New collection successfully created");
+        } catch(RuntimeException ex) {
+            LOGGER.error("Collection with this name already exists");
+            LOGGER.error(ex.getMessage());
+            return ResponseEntity.status(400).body(new ErrorResponse("Collection with this name already exists"));
+        }
+    }
 }
