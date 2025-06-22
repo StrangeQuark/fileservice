@@ -82,10 +82,18 @@ public class FileServiceTest extends BaseServiceTest {
     void createNewCollectionTest() {
         LOGGER.info("Begin createNewCollectionTest");
 
-        String testCollectionName = "testCollectionName";
-
-        ResponseEntity<?> response = fileService.createNewCollection(testCollectionName);
+        ResponseEntity<?> response = fileService.createNewCollection("testCollectionName");
 
         Assertions.assertEquals(200, response.getStatusCode().value());
+    }
+
+    @Test
+    void deleteCollectionTest() {
+        LOGGER.info("Begin deleteCollectionTest");
+
+        ResponseEntity<?> response = fileService.deleteCollection(collectionName);
+
+        Assertions.assertEquals(200, response.getStatusCode().value());
+        Assertions.assertFalse(collectionRepository.existsByName(collectionName));
     }
 }
