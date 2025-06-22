@@ -13,33 +13,38 @@ public class FileController {
         this.fileService = fileService;
     }
 
-    @GetMapping("/getAll")
+    @GetMapping("/get-all/{collectionName}")
     public ResponseEntity<?> getAllFiles(@PathVariable String collectionName) {
         return fileService.getAllFiles(collectionName);
     }
 
-    @GetMapping("/delete/{fileName}")
-    public ResponseEntity<?> deleteFile(@PathVariable String collectionName, @PathVariable String fileName) {
-        return fileService.deleteFile(collectionName, fileName);
-    }
-
-    @GetMapping("/download/{fileName}")
+    @GetMapping("/download/{collectionName}/{fileName}")
     public ResponseEntity<?> downloadFile(@PathVariable String collectionName, @PathVariable String fileName) {
         return fileService.downloadFile(collectionName, fileName);
     }
 
-    @GetMapping("/stream/{fileName}")
+    @GetMapping("/stream/{collectionName}/{fileName}")
     public ResponseEntity<?> streamFile(@PathVariable String collectionName, @PathVariable String fileName, @RequestHeader(value = "Range", required = false) String rangeHeader) {
         return fileService.streamFile(collectionName, fileName, rangeHeader);
     }
 
-    @PostMapping("/upload")
+    @PostMapping("/upload/{collectionName}")
     public ResponseEntity<?> uploadFile(@RequestParam("file") MultipartFile file, @PathVariable String collectionName) {
         return fileService.uploadFile(file, collectionName);
     }
 
-    @PostMapping("new-collection")
+    @PostMapping("/new-collection/{collectionName}")
     public ResponseEntity<?> createNewCollection(@PathVariable String collectionName) {
         return fileService.createNewCollection(collectionName);
+    }
+
+    @DeleteMapping("/delete/{collectionName}/{fileName}")
+    public ResponseEntity<?> deleteFile(@PathVariable String collectionName, @PathVariable String fileName) {
+        return fileService.deleteFile(collectionName, fileName);
+    }
+
+    @DeleteMapping("/delete-collection/{collectionName}")
+    public ResponseEntity<?> deleteCollection(@PathVariable String collectionName) {
+        return fileService.deleteCollection(collectionName);
     }
 }

@@ -113,9 +113,9 @@ public class FileService {
             LOGGER.error(ex.getMessage());
             return ResponseEntity.status(404).body(new ErrorResponse("File not found"));
         } catch (RuntimeException ex) {
-            LOGGER.error("File download failed - runtime exception");
+            LOGGER.error("Collection not found when downloading file");
             LOGGER.error(ex.getMessage());
-            return ResponseEntity.status(500).body(new ErrorResponse("File download failed - runtime exception"));
+            return ResponseEntity.status(500).body(new ErrorResponse("Collection not found"));
         }
         catch (Exception ex) {
             LOGGER.error("File download failed");
@@ -222,10 +222,14 @@ public class FileService {
             LOGGER.error("NPE - Invalid file extension");
             LOGGER.error(ex.getMessage());
             return ResponseEntity.status(500).body(new ErrorResponse("File upload failed, invalid file extension"));
+        } catch (RuntimeException ex) {
+            LOGGER.error("Collection not found when uploading file");
+            LOGGER.error(ex.getMessage());
+            return ResponseEntity.status(400).body(new ErrorResponse("Collection not found when uploading file"));
         }
     }
 
-    @Transactional
+    @Transactional(readOnly = false)
     public ResponseEntity<?> createNewCollection(String collectionName) {
         LOGGER.info("Attempting to create new collection");
 
@@ -241,6 +245,35 @@ public class FileService {
             LOGGER.error("Collection with this name already exists");
             LOGGER.error(ex.getMessage());
             return ResponseEntity.status(400).body(new ErrorResponse("Collection with this name already exists"));
+        }
+    }
+
+    @Transactional(readOnly = false)
+    public ResponseEntity<?> deleteCollection(String collectionName) {
+        LOGGER.info("Attempting to delete collection and all associated files");
+
+        try {
+            Collection collection = collectionRepository.findByName(collectionName)
+                    .orElseThrow(() -> new RuntimeException("Unable to locate collection when attempting to delete"));
+
+            LOGGER.info("Deleting all files and metadata in collection metadata list");
+            for(Metadata metadata : collection.getMetadataList()) {
+                LOGGER.info("Deleting file " + metadata.getFileUUID());
+                deleteFile(collectionName, metadata.getFileName());
+
+                LOGGER.info("Deleting metadata " + metadata.getId());
+                metadataRepository.delete(metadata);
+            }
+
+            LOGGER.info("Metadata and files deleted, deleting collection");
+            collectionRepository.delete(collection);
+
+            LOGGER.info("Collection successfully deleted");
+            return ResponseEntity.ok("Collection and children files successfully deleted");
+        } catch (RuntimeException ex) {
+            LOGGER.error("Unable to locate collection when attempting to delete");
+            LOGGER.error(ex.getMessage());
+            return ResponseEntity.status(400).body(new ErrorResponse("Unable to locate collection when attempting to delete"));
         }
     }
 }
