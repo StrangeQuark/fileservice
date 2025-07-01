@@ -16,7 +16,7 @@ public class SecurityConfig {
                 //Allow the reactService through the CORS policy
                 registry.addMapping("/**")
                         .allowedOrigins(
-                                "http://react-service:6000"
+                                "http://react-service:6080"
                         )
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                         .allowCredentials(true);
