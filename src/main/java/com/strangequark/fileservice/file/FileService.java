@@ -2,6 +2,8 @@ package com.strangequark.fileservice.file;
 
 import com.strangequark.fileservice.collection.Collection;
 import com.strangequark.fileservice.collection.CollectionRepository;
+import com.strangequark.fileservice.collection.CollectionUser;
+import com.strangequark.fileservice.collection.CollectionUserRole;
 import com.strangequark.fileservice.response.ErrorResponse;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
@@ -237,7 +239,10 @@ public class FileService {
             if(collectionRepository.existsByName(collectionName))
                 throw new RuntimeException("Collection with this name already exists");
 
-            collectionRepository.save(new Collection(collectionName));
+            Collection newCollection = new Collection(collectionName);
+            newCollection.addUser(new CollectionUser(newCollection, UUID.randomUUID(), CollectionUserRole.OWNER));
+
+            collectionRepository.save(newCollection);
 
             LOGGER.info("New collection successfully created");
             return ResponseEntity.ok("New collection successfully created");

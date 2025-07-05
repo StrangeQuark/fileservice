@@ -5,17 +5,20 @@ import com.strangequark.fileservice.metadata.Metadata;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Entity
 @Table(name = "collections")
 public class Collection {
 
     public Collection() {
-
+        this.collectionUsers = new ArrayList<>();
     }
 
     public Collection(String name) {
+        this();
         this.name = name;
     }
 
@@ -25,8 +28,8 @@ public class Collection {
     }
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private long id;
+    @GeneratedValue
+    private UUID id;
 
     @Column(unique = true, nullable = false)
     private String name;
@@ -41,6 +44,9 @@ public class Collection {
     @JsonManagedReference
     private List<Metadata> metadataList;
 
+    @OneToMany(mappedBy = "collection", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<CollectionUser> collectionUsers;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -52,11 +58,11 @@ public class Collection {
         updatedAt = LocalDateTime.now();
     }
 
-    public Long getId() {
+    public UUID getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(UUID id) {
         this.id = id;
     }
 
@@ -90,5 +96,17 @@ public class Collection {
 
     public void setMetadataList(List<Metadata> metadataList) {
         this.metadataList = metadataList;
+    }
+
+    public List<CollectionUser> getCollectionUsers() {
+        return collectionUsers;
+    }
+
+    public void setCollectionUsers(List<CollectionUser> collectionUsers) {
+        this.collectionUsers = collectionUsers;
+    }
+
+    public void addUser(CollectionUser collectionUser) {
+        this.collectionUsers.add(collectionUser);
     }
 }
