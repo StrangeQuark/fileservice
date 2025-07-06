@@ -3,13 +3,15 @@ package com.strangequark.fileservice.file;
 import com.strangequark.fileservice.collection.Collection;
 import com.strangequark.fileservice.collection.CollectionRepository;
 import com.strangequark.fileservice.collection.CollectionUser;// Integration line: Auth
-import com.strangequark.fileservice.collection.CollectionUserRole;
+import com.strangequark.fileservice.collection.CollectionUserRole;// Integration line: Auth
 import com.strangequark.fileservice.response.ErrorResponse;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
 import com.strangequark.fileservice.response.UploadResponse;
+import com.strangequark.fileservice.utility.JwtUtility;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -32,6 +34,9 @@ public class FileService {
 
     private final MetadataRepository metadataRepository;
     private final CollectionRepository collectionRepository;
+
+    @Autowired// Integration line: Auth
+    JwtUtility jwtUtility;// Integration line: Auth
 
     public FileService(MetadataRepository metadataRepository, CollectionRepository collectionRepository) throws IOException {
         this.metadataRepository = metadataRepository;
@@ -240,7 +245,7 @@ public class FileService {
                 throw new RuntimeException("Collection with this name already exists");
 
             Collection newCollection = new Collection(collectionName);
-            newCollection.addUser(new CollectionUser(newCollection, UUID.randomUUID(), CollectionUserRole.OWNER));// Integration line: Auth
+            newCollection.addUser(new CollectionUser(newCollection, UUID.fromString(jwtUtility.extractSubject()), CollectionUserRole.OWNER));// Integration line: Auth
 
             collectionRepository.save(newCollection);
 
