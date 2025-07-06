@@ -1,3 +1,5 @@
+// Integration file: Auth
+
 package com.strangequark.fileservice.collection;
 
 import org.springframework.data.jpa.repository.JpaRepository;
