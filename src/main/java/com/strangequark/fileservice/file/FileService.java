@@ -2,7 +2,7 @@ package com.strangequark.fileservice.file;
 
 import com.strangequark.fileservice.collection.Collection;
 import com.strangequark.fileservice.collection.CollectionRepository;
-import com.strangequark.fileservice.collection.CollectionUser;
+import com.strangequark.fileservice.collection.CollectionUser;// Integration line: Auth
 import com.strangequark.fileservice.collection.CollectionUserRole;
 import com.strangequark.fileservice.response.ErrorResponse;
 import com.strangequark.fileservice.metadata.Metadata;
@@ -240,7 +240,7 @@ public class FileService {
                 throw new RuntimeException("Collection with this name already exists");
 
             Collection newCollection = new Collection(collectionName);
-            newCollection.addUser(new CollectionUser(newCollection, UUID.randomUUID(), CollectionUserRole.OWNER));
+            newCollection.addUser(new CollectionUser(newCollection, UUID.randomUUID(), CollectionUserRole.OWNER));// Integration line: Auth
 
             collectionRepository.save(newCollection);
 

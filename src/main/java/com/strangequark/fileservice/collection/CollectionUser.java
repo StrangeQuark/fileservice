@@ -1,3 +1,5 @@
+// Integration file: Auth
+
 package com.strangequark.fileservice.collection;
 
 import jakarta.persistence.*;

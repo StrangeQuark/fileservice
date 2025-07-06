@@ -14,7 +14,7 @@ import java.util.UUID;
 public class Collection {
 
     public Collection() {
-        this.collectionUsers = new ArrayList<>();
+        this.collectionUsers = new ArrayList<>();// Integration line: Auth
     }
 
     public Collection(String name) {
@@ -44,8 +44,8 @@ public class Collection {
     @JsonManagedReference
     private List<Metadata> metadataList;
 
-    @OneToMany(mappedBy = "collection", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<CollectionUser> collectionUsers;
+    @OneToMany(mappedBy = "collection", cascade = CascadeType.ALL, orphanRemoval = true)// Integration line: Auth
+    private List<CollectionUser> collectionUsers;// Integration line: Auth
 
     @PrePersist
     protected void onCreate() {
@@ -98,6 +98,7 @@ public class Collection {
         this.metadataList = metadataList;
     }
 
+    // Integration function start: Auth
     public List<CollectionUser> getCollectionUsers() {
         return collectionUsers;
     }
@@ -108,5 +109,5 @@ public class Collection {
 
     public void addUser(CollectionUser collectionUser) {
         this.collectionUsers.add(collectionUser);
-    }
+    }// Integration function end: Auth
 }
