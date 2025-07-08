@@ -230,9 +230,8 @@ public class FileService {
             LOGGER.error(ex.getMessage());
             return ResponseEntity.status(500).body(new ErrorResponse("File upload failed, invalid file extension"));
         } catch (RuntimeException ex) {
-            LOGGER.error("Collection not found when uploading file");
             LOGGER.error(ex.getMessage());
-            return ResponseEntity.status(400).body(new ErrorResponse("Collection not found when uploading file"));
+            return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
     }
 
@@ -245,16 +244,15 @@ public class FileService {
                 throw new RuntimeException("Collection with this name already exists");
 
             Collection newCollection = new Collection(collectionName);
-            newCollection.addUser(new CollectionUser(newCollection, UUID.fromString(jwtUtility.extractSubject()), CollectionUserRole.OWNER));// Integration line: Auth
+            newCollection.addUser(new CollectionUser(newCollection, UUID.fromString(jwtUtility.extractId()), CollectionUserRole.OWNER));// Integration line: Auth
 
             collectionRepository.save(newCollection);
 
             LOGGER.info("New collection successfully created");
             return ResponseEntity.ok("New collection successfully created");
         } catch(RuntimeException ex) {
-            LOGGER.error("Collection with this name already exists");
             LOGGER.error(ex.getMessage());
-            return ResponseEntity.status(400).body(new ErrorResponse("Collection with this name already exists"));
+            return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
     }
 
