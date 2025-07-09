@@ -38,6 +38,11 @@ public class FileController {
         return fileService.createNewCollection(collectionName);
     }
 
+    @GetMapping("/get-all-collections")
+    public ResponseEntity<?> getAllCollections() {
+        return fileService.getAllCollections();
+    }
+
     @DeleteMapping("/delete/{collectionName}/{fileName}")
     public ResponseEntity<?> deleteFile(@PathVariable String collectionName, @PathVariable String fileName) {
         return fileService.deleteFile(collectionName, fileName);

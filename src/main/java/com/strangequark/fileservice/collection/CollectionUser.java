@@ -2,6 +2,7 @@
 
 package com.strangequark.fileservice.collection;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 
 import java.util.UUID;
@@ -25,6 +26,7 @@ public class CollectionUser {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "collection_id", nullable = false)
+    @JsonBackReference
     private Collection collection;
 
     private UUID userId;

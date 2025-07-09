@@ -44,8 +44,9 @@ public class Collection {
     @JsonManagedReference
     private List<Metadata> metadataList;
 
-    @OneToMany(mappedBy = "collection", cascade = CascadeType.ALL, orphanRemoval = true)// Integration line: Auth
-    private List<CollectionUser> collectionUsers;// Integration line: Auth
+    @OneToMany(mappedBy = "collection", cascade = CascadeType.ALL, orphanRemoval = true)// Integration function start: Auth
+    @JsonManagedReference
+    private List<CollectionUser> collectionUsers;// Integration function end: Auth
 
     @PrePersist
     protected void onCreate() {
