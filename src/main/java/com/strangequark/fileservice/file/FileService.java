@@ -1,9 +1,7 @@
 package com.strangequark.fileservice.file;
 
+import com.strangequark.fileservice.collection.*;
 import com.strangequark.fileservice.collection.Collection;
-import com.strangequark.fileservice.collection.CollectionRepository;
-import com.strangequark.fileservice.collection.CollectionUser;// Integration line: Auth
-import com.strangequark.fileservice.collection.CollectionUserRole;// Integration line: Auth
 import com.strangequark.fileservice.response.ErrorResponse;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
@@ -34,6 +32,8 @@ public class FileService {
 
     private final MetadataRepository metadataRepository;
     private final CollectionRepository collectionRepository;
+    @Autowired// Integration line: Auth
+    private CollectionUserRepository collectionUserRepository;// Integration line: Auth
 
     @Autowired// Integration line: Auth
     JwtUtility jwtUtility;// Integration line: Auth
@@ -251,6 +251,22 @@ public class FileService {
             LOGGER.info("New collection successfully created");
             return ResponseEntity.ok("New collection successfully created");
         } catch(RuntimeException ex) {
+            LOGGER.error(ex.getMessage());
+            return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> getAllCollections() {
+        LOGGER.info("Attempting to retrieve all collections");
+
+        try {
+            List<Collection> collectionList;
+            collectionList = collectionRepository.findAll();
+            collectionList = collectionUserRepository.findCollectionsByUserId(UUID.fromString(jwtUtility.extractId()));// Integration line: Auth
+
+            return ResponseEntity.ok(collectionList);
+        } catch(Exception ex) {
             LOGGER.error(ex.getMessage());
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
