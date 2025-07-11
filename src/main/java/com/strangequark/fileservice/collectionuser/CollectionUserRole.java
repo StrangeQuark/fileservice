@@ -1,6 +1,6 @@
 // Integration file: Auth
 
-package com.strangequark.fileservice.collection;
+package com.strangequark.fileservice.collectionuser;
 
 public enum CollectionUserRole {
     OWNER,

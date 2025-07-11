@@ -1,5 +1,6 @@
 package com.strangequark.fileservice.file;
 
+import com.strangequark.fileservice.collectionuser.CollectionUserRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -52,4 +53,9 @@ public class FileController {
     public ResponseEntity<?> deleteCollection(@PathVariable String collectionName) {
         return fileService.deleteCollection(collectionName);
     }
+
+    @PostMapping("/add-user-to-collection")// Integration function start: Auth
+    public ResponseEntity<?> addUserToCollection(@RequestBody CollectionUserRequest collectionUserRequest) {
+        return fileService.addUserToCollection(collectionUserRequest);
+    }// Integration function end: Auth
 }
