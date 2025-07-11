@@ -1,6 +1,7 @@
 package com.strangequark.fileservice.collection;
 
 import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.strangequark.fileservice.collectionuser.CollectionUser;
 import com.strangequark.fileservice.metadata.Metadata;
 import jakarta.persistence.*;
 

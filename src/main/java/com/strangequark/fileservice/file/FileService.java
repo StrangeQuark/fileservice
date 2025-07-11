@@ -2,6 +2,10 @@ package com.strangequark.fileservice.file;
 
 import com.strangequark.fileservice.collection.*;
 import com.strangequark.fileservice.collection.Collection;
+import com.strangequark.fileservice.collectionuser.CollectionUser;
+import com.strangequark.fileservice.collectionuser.CollectionUserRepository;
+import com.strangequark.fileservice.collectionuser.CollectionUserRequest;
+import com.strangequark.fileservice.collectionuser.CollectionUserRole;
 import com.strangequark.fileservice.response.ErrorResponse;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
@@ -300,4 +304,25 @@ public class FileService {
             return ResponseEntity.status(400).body(new ErrorResponse("Unable to locate collection when attempting to delete"));
         }
     }
+
+    // Integration function start: Auth
+    @Transactional(readOnly = false)
+    public ResponseEntity<?> addUserToCollection(CollectionUserRequest collectionUserRequest) {
+        LOGGER.info("Attempting to add user to collection");
+
+        try {
+            Collection collection = collectionRepository.findByName(collectionUserRequest.getCollectionName())
+                    .orElseThrow(() -> new RuntimeException("Collection with this name does not exist"));
+
+            collection.addUser(new CollectionUser(collection, collectionUserRequest.getUserId(), collectionUserRequest.getRole()));
+
+            collectionRepository.save(collection);
+
+            LOGGER.info("User successfully added to collection");
+            return ResponseEntity.ok("User successfully added to collection");
+        } catch(RuntimeException ex) {
+            LOGGER.error(ex.getMessage());
+            return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
+        }
+    }// Integration function end: Auth
 }

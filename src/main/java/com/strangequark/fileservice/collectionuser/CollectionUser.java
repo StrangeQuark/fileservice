@@ -1,8 +1,9 @@
 // Integration file: Auth
 
-package com.strangequark.fileservice.collection;
+package com.strangequark.fileservice.collectionuser;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.strangequark.fileservice.collection.Collection;
 import jakarta.persistence.*;
 
 import java.util.UUID;
