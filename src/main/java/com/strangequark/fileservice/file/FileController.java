@@ -54,8 +54,14 @@ public class FileController {
         return fileService.deleteCollection(collectionName);
     }
 
-    @PostMapping("/add-user-to-collection")// Integration function start: Auth
+    // Integration function start: Auth
+    @PostMapping("/add-user-to-collection")
     public ResponseEntity<?> addUserToCollection(@RequestBody CollectionUserRequest collectionUserRequest) {
         return fileService.addUserToCollection(collectionUserRequest);
+    }
+
+    @DeleteMapping("/delete-user-from-collection")
+    public ResponseEntity<?> deleteUserFromCollection(@RequestBody CollectionUserRequest collectionUserRequest) {
+        return fileService.deleteUserFromCollection(collectionUserRequest);
     }// Integration function end: Auth
 }
