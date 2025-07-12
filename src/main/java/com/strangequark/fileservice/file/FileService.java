@@ -324,5 +324,23 @@ public class FileService {
             LOGGER.error(ex.getMessage());
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
+    }
+
+    @Transactional(readOnly = false)
+    public ResponseEntity<?> deleteUserFromCollection(CollectionUserRequest collectionUserRequest) {
+        LOGGER.info("Attempting to delete user from collection");
+
+        try {
+            Collection collection = collectionRepository.findByName(collectionUserRequest.getCollectionName())
+                    .orElseThrow(() -> new RuntimeException("Collection with this name does not exist"));
+
+            collectionUserRepository.deleteCollectionUser(collectionUserRequest.getUserId(), collection.getId());
+
+            LOGGER.info("User successfully deleted from collection");
+            return ResponseEntity.ok("User successfully deleted from collection");
+        } catch(RuntimeException ex) {
+            LOGGER.error(ex.getMessage());
+            return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
+        }
     }// Integration function end: Auth
 }
