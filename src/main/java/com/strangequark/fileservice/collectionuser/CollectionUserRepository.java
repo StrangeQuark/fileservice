@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.UUID;
 
 public interface CollectionUserRepository extends JpaRepository<CollectionUser, UUID> {
+    CollectionUser findByUserIdAndCollectionId(UUID userId, UUID collectionId);
+
     @Query("SELECT cu.collection FROM CollectionUser cu WHERE cu.userId = :userId")
     List<Collection> findCollectionsByUserId(UUID userId);
 
