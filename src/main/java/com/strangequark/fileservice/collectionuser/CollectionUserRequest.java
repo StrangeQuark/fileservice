@@ -6,16 +6,16 @@ import java.util.UUID;
 
 public class CollectionUserRequest {
     private String collectionName;
-    private UUID userId;
+    private String username;
     private CollectionUserRole role;
 
     public CollectionUserRequest() {
 
     }
 
-    public CollectionUserRequest(String collectionName, UUID userId, CollectionUserRole role) {
+    public CollectionUserRequest(String collectionName, String username, CollectionUserRole role) {
         this.collectionName = collectionName;
-        this.userId = userId;
+        this.username = username;
         this.role = role;
     }
 
@@ -27,12 +27,12 @@ public class CollectionUserRequest {
         this.collectionName = collectionName;
     }
 
-    public UUID getUserId() {
-        return userId;
+    public String getUsername() {
+        return username;
     }
 
-    public void setUserId(UUID userId) {
-        this.userId = userId;
+    public void setUsername(String username) {
+        this.username = username;
     }
 
     public CollectionUserRole getRole() {

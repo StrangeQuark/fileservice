@@ -10,12 +10,12 @@ import com.strangequark.fileservice.response.ErrorResponse;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
 import com.strangequark.fileservice.response.UploadResponse;
+import com.strangequark.fileservice.utility.AuthUtility;
 import com.strangequark.fileservice.utility.JwtUtility;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -30,11 +30,9 @@ import javax.crypto.spec.SecretKeySpec;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.*;
 
 @Service
@@ -47,11 +45,12 @@ public class FileService {
 
     @Value("${ENCRYPTION_KEY}")
     private String encryptionKey;
-    @Autowired// Integration line: Auth
-    private CollectionUserRepository collectionUserRepository;// Integration line: Auth
-
-    @Autowired// Integration line: Auth
-    JwtUtility jwtUtility;// Integration line: Auth
+    @Autowired// Integration function start: Auth
+    private CollectionUserRepository collectionUserRepository;
+    @Autowired
+    JwtUtility jwtUtility;
+    @Autowired
+    AuthUtility authUtility;// Integration function end: Auth
 
     public FileService(MetadataRepository metadataRepository, CollectionRepository collectionRepository) throws IOException {
         this.metadataRepository = metadataRepository;
@@ -383,13 +382,21 @@ public class FileService {
                 throw new RuntimeException("Only collection OWNERs can add new users.");
             }
 
+            // Ensure the target user exists
+            String userIdStr = authUtility.getUserId(collectionUserRequest.getUsername());
+            if (userIdStr == null) {
+                throw new RuntimeException("Unable to retrieve user id");
+            }
+            UUID userId = UUID.fromString(userIdStr);
+
+
             // Avoid duplicate users
-            CollectionUser existing = collectionUserRepository.findByUserIdAndCollectionId(collectionUserRequest.getUserId(), collection.getId());
+            CollectionUser existing = collectionUserRepository.findByUserIdAndCollectionId(userId, collection.getId());
             if (existing != null) {
                 throw new RuntimeException("User is already part of the collection.");
             }
 
-            collection.addUser(new CollectionUser(collection, collectionUserRequest.getUserId(), collectionUserRequest.getRole()));
+            collection.addUser(new CollectionUser(collection, userId, collectionUserRequest.getRole()));
 
             collectionRepository.save(collection);
 
@@ -416,15 +423,22 @@ public class FileService {
                 throw new RuntimeException("Requesting user does not have access to this collection");
             }
 
-            CollectionUser targetUser = collectionUserRepository.findByUserIdAndCollectionId(collectionUserRequest.getUserId(), collection.getId());
+            // Ensure the target user exists
+            String userIdStr = authUtility.getUserId(collectionUserRequest.getUsername());
+            if (userIdStr == null) {
+                throw new RuntimeException("Unable to retrieve user id");
+            }
+            UUID userId = UUID.fromString(userIdStr);
+
+            CollectionUser targetUser = collectionUserRepository.findByUserIdAndCollectionId(userId, collection.getId());
 
             // Check if the target user of the request belongs to the collection
             if (targetUser == null) {
                 throw new RuntimeException("Target user is not part of this collection.");
             }
 
-            // Check if the requesting user is either attempting to remove themself or is an OWNER
-            if(!requestingUser.getUserId().equals(targetUser.getUserId()) || requestingUser.getRole() != CollectionUserRole.OWNER) {
+            // Check if the requesting user is either attempting to remove self or is an OWNER
+            if(!requestingUser.getUserId().equals(targetUser.getUserId()) && requestingUser.getRole() != CollectionUserRole.OWNER) {
                 throw new RuntimeException("Only OWNER users can remove others");
             }
 
@@ -439,7 +453,7 @@ public class FileService {
                 }
             }
 
-            collectionUserRepository.deleteCollectionUser(collectionUserRequest.getUserId(), collection.getId());
+            collectionUserRepository.deleteCollectionUser(userId, collection.getId());
 
             LOGGER.info("User successfully deleted from collection");
             return ResponseEntity.ok("User successfully deleted from collection");

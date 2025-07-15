@@ -60,7 +60,7 @@ public class FileController {
         return fileService.addUserToCollection(collectionUserRequest);
     }
 
-    @DeleteMapping("/delete-user-from-collection")
+    @PostMapping("/delete-user-from-collection")
     public ResponseEntity<?> deleteUserFromCollection(@RequestBody CollectionUserRequest collectionUserRequest) {
         return fileService.deleteUserFromCollection(collectionUserRequest);
     }// Integration function end: Auth
