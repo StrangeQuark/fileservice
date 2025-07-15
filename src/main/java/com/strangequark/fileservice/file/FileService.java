@@ -2,10 +2,10 @@ package com.strangequark.fileservice.file;
 
 import com.strangequark.fileservice.collection.*;
 import com.strangequark.fileservice.collection.Collection;
-import com.strangequark.fileservice.collectionuser.CollectionUser;
-import com.strangequark.fileservice.collectionuser.CollectionUserRepository;
-import com.strangequark.fileservice.collectionuser.CollectionUserRequest;
-import com.strangequark.fileservice.collectionuser.CollectionUserRole;
+import com.strangequark.fileservice.collectionuser.CollectionUser;// Integration line: Auth
+import com.strangequark.fileservice.collectionuser.CollectionUserRepository;// Integration line: Auth
+import com.strangequark.fileservice.collectionuser.CollectionUserRequest;// Integration line: Auth
+import com.strangequark.fileservice.collectionuser.CollectionUserRole;// Integration line: Auth
 import com.strangequark.fileservice.response.ErrorResponse;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
