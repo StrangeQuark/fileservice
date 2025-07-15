@@ -2,8 +2,6 @@
 
 package com.strangequark.fileservice.collectionuser;
 
-import java.util.UUID;
-
 public class CollectionUserRequest {
     private String collectionName;
     private String username;

@@ -1,6 +1,6 @@
 package com.strangequark.fileservice.file;
 
-import com.strangequark.fileservice.collectionuser.CollectionUserRequest;
+import com.strangequark.fileservice.collectionuser.CollectionUserRequest;// Integration line: Auth
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
