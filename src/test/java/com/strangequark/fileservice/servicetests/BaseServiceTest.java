@@ -2,9 +2,13 @@ package com.strangequark.fileservice.servicetests;
 
 import com.strangequark.fileservice.collection.Collection;
 import com.strangequark.fileservice.collection.CollectionRepository;
+import com.strangequark.fileservice.collectionuser.CollectionUser;// Integration line: Auth
+import com.strangequark.fileservice.collectionuser.CollectionUserRepository;// Integration line: Auth
+import com.strangequark.fileservice.collectionuser.CollectionUserRole;// Integration line: Auth
 import com.strangequark.fileservice.file.FileService;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
+import com.strangequark.fileservice.utility.JwtUtility;// Integration line: Auth
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.TestInstance;
@@ -14,12 +18,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;// Integration line: Auth
 
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Optional;
-import java.util.UUID;
+import java.util.UUID;// Integration line: Auth
+
+import static org.mockito.Mockito.when;// Integration line: Auth
 
 @SpringBootTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -31,6 +38,12 @@ public abstract class BaseServiceTest {
     public MetadataRepository metadataRepository;
     @Autowired
     public CollectionRepository collectionRepository;
+    @Autowired// Integration function start: Auth
+    public CollectionUserRepository collectionUserRepository;
+    @MockitoBean
+    public JwtUtility jwtUtility;
+    public UUID testUserId = UUID.randomUUID();// Integration function end: Auth
+
 
     public Collection collection;
     public MockMultipartFile mockMultipartFile;
@@ -49,6 +62,10 @@ public abstract class BaseServiceTest {
         collection = new Collection(collectionName);
         collectionRepository.save(collection);
         LOGGER.info("Test collection successfully created");
+        // Integration function start: Auth
+        CollectionUser collectionUser = new CollectionUser(collection, testUserId, CollectionUserRole.OWNER);
+        collectionUserRepository.save(collectionUser);
+        when(jwtUtility.extractId()).thenReturn(testUserId.toString());// Integration function end: Auth
 
         mockMultipartFile = new MockMultipartFile("testFile", fileName,
             "text/plain", "Test file data".getBytes());
@@ -75,6 +92,7 @@ public abstract class BaseServiceTest {
 
         try {
             collectionRepository.deleteAll();
+            collectionUserRepository.deleteAll();// Integration line: Auth
             LOGGER.info("Collections successful teardown");
         } catch (Exception ex) {
             LOGGER.error("Exception when attempting to clean up collection repository during testing");
