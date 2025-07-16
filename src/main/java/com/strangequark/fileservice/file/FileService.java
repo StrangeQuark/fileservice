@@ -10,8 +10,8 @@ import com.strangequark.fileservice.response.ErrorResponse;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
 import com.strangequark.fileservice.response.UploadResponse;
-import com.strangequark.fileservice.utility.AuthUtility;
-import com.strangequark.fileservice.utility.JwtUtility;
+import com.strangequark.fileservice.utility.AuthUtility;// Integration line: Auth
+import com.strangequark.fileservice.utility.JwtUtility;// Integration line: Auth
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
