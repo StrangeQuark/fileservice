@@ -69,15 +69,6 @@ To enable this:
 
 For more information, see: [Authservice GitHub Repository](https://github.com/StrangeQuark/authservice)
 
-## Roadmap
-Planned features include:
-
-- Kubernetes deployment support
-- Horizontal scaling
-- Collection sharing and permissions
-- Chunked file uploads for large files
-- Monitoring and metrics
-
 ## License
 This project is licensed under the GNU General Public License. See `LICENSE.md` for details.
 
