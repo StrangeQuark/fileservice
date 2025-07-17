@@ -25,7 +25,7 @@ import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Optional;
-import java.util.UUID;// Integration line: Auth
+import java.util.UUID;
 
 import static org.mockito.Mockito.when;// Integration line: Auth
 
