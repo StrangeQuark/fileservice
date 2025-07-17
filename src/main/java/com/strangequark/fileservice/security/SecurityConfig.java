@@ -20,7 +20,7 @@ public class SecurityConfig {
                 //Allow the reactService through the CORS policy
                 registry.addMapping("/**")
                         .allowedOrigins(allowedOrigins)
-                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                        .allowedMethods("GET", "POST", "DELETE")
                         .allowCredentials(true);
             }
         };

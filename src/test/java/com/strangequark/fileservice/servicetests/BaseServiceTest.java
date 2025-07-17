@@ -8,6 +8,7 @@ import com.strangequark.fileservice.collectionuser.CollectionUserRole;// Integra
 import com.strangequark.fileservice.file.FileService;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
+import com.strangequark.fileservice.utility.AuthUtility;
 import com.strangequark.fileservice.utility.JwtUtility;// Integration line: Auth
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,7 +25,7 @@ import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Optional;
-import java.util.UUID;// Integration line: Auth
+import java.util.UUID;
 
 import static org.mockito.Mockito.when;// Integration line: Auth
 
@@ -42,6 +43,8 @@ public abstract class BaseServiceTest {
     public CollectionUserRepository collectionUserRepository;
     @MockitoBean
     public JwtUtility jwtUtility;
+    @MockitoBean
+    public AuthUtility authUtility;
     public UUID testUserId = UUID.randomUUID();// Integration function end: Auth
 
 

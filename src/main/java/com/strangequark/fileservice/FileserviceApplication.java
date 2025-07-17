@@ -9,5 +9,4 @@ public class FileserviceApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(FileserviceApplication.class, args);
 	}
-
 }
