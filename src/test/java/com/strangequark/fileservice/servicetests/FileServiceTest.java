@@ -1,5 +1,7 @@
 package com.strangequark.fileservice.servicetests;
 
+import com.strangequark.fileservice.collectionuser.CollectionUserRequest;// Integration line: Auth
+import com.strangequark.fileservice.collectionuser.CollectionUserRole;// Integration line: Auth
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.response.UploadResponse;
 import org.junit.jupiter.api.Assertions;
@@ -8,6 +10,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.File;
+import java.util.UUID;// Integration line: Auth
+
+import static org.mockito.Mockito.when;// Integration line: Auth
 
 public class FileServiceTest extends BaseServiceTest {
 
@@ -96,4 +101,42 @@ public class FileServiceTest extends BaseServiceTest {
         Assertions.assertEquals(200, response.getStatusCode().value());
         Assertions.assertFalse(collectionRepository.existsByName(collectionName));
     }
+
+    // Integration function start: Auth
+    @Test
+    void addUserToCollectionTest() {
+        LOGGER.info("Begin addUserToCollectionTest");
+
+        UUID testUserUUID = UUID.randomUUID();
+        CollectionUserRequest request = new CollectionUserRequest(collectionName, "testUser", CollectionUserRole.READ_WRITE);
+
+        when(authUtility.getUserId(request.getUsername())).thenReturn(String.valueOf(testUserUUID));
+
+        ResponseEntity<?> response = fileService.addUserToCollection(request);
+
+        Assertions.assertEquals(200, response.getStatusCode().value());
+        Assertions.assertNotNull(collectionUserRepository.findByUserIdAndCollectionId(testUserUUID, collection.getId()));
+    }
+
+    @Test
+    void deleteUserFromCollectionTest() {
+        LOGGER.info("Begin deleteUserFromCollectionTest");
+
+        // We must first add a user to the collection
+        UUID testUserUUID = UUID.randomUUID();
+        CollectionUserRequest request = new CollectionUserRequest(collectionName, "testUser", CollectionUserRole.READ_WRITE);
+
+        when(authUtility.getUserId(request.getUsername())).thenReturn(String.valueOf(testUserUUID));
+
+        ResponseEntity<?> response = fileService.addUserToCollection(request);
+
+        Assertions.assertEquals(200, response.getStatusCode().value());
+        Assertions.assertNotNull(collectionUserRepository.findByUserIdAndCollectionId(testUserUUID, collection.getId()));
+
+        // User is added, now let's delete
+        response = fileService.deleteUserFromCollection(request);
+
+        Assertions.assertEquals(200, response.getStatusCode().value());
+        Assertions.assertNull(collectionUserRepository.findByUserIdAndCollectionId(testUserUUID, collection.getId()));
+    }// Integration function end: Auth
 }
