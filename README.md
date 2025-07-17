@@ -36,7 +36,7 @@ git clone https://github.com/StrangeQuark/fileservice.git
 cd fileservice
 docker-compose up --build
 ```
-<br><br>
+<br>
 
 ### Environment Variables
 The `.env` file is required to provide necessary configuration such as encryption secrets and database credentials. Default values are provided in `.env` file so the application can run out-of-the-box for testing.
