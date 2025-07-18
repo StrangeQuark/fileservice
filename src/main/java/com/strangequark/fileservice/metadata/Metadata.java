@@ -2,8 +2,12 @@ package com.strangequark.fileservice.metadata;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.strangequark.fileservice.collection.Collection;
+import com.strangequark.fileservice.utility.LocalDateTimeEncryptDecryptConverter;
+import com.strangequark.fileservice.utility.LongEncryptDecryptConverter;
+import com.strangequark.fileservice.utility.StringEncryptDecryptConverter;
 import jakarta.persistence.*;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
@@ -32,13 +36,36 @@ public class Metadata {
     private Collection collection;
 
     @Column(name = "file_name")
+    @Convert(converter = StringEncryptDecryptConverter.class)
     private String fileName;
 
+    @Convert(converter = StringEncryptDecryptConverter.class)
     private String fileUUID;
 
+    @Convert(converter = StringEncryptDecryptConverter.class)
     private String fileType;
 
+    @Convert(converter = LongEncryptDecryptConverter.class)
     private Long fileSize;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    @Convert(converter = LocalDateTimeEncryptDecryptConverter.class)
+    private LocalDateTime createdAt;
+
+    @Column(name = "updated_at")
+    @Convert(converter = LocalDateTimeEncryptDecryptConverter.class)
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 
     public String getFileName() {
         return fileName;
@@ -78,5 +105,21 @@ public class Metadata {
 
     public void setFileSize(Long fileSize) {
         this.fileSize = fileSize;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }

@@ -3,6 +3,8 @@ package com.strangequark.fileservice.collection;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import com.strangequark.fileservice.collectionuser.CollectionUser;// Integration line: Auth
 import com.strangequark.fileservice.metadata.Metadata;
+import com.strangequark.fileservice.utility.LocalDateTimeEncryptDecryptConverter;
+import com.strangequark.fileservice.utility.StringEncryptDecryptConverter;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
@@ -33,12 +35,15 @@ public class Collection {
     private UUID id;
 
     @Column(unique = true, nullable = false)
+    @Convert(converter = StringEncryptDecryptConverter.class)
     private String name;
 
     @Column(name = "created_at", nullable = false, updatable = false)
+    @Convert(converter = LocalDateTimeEncryptDecryptConverter.class)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at")
+    @Convert(converter = LocalDateTimeEncryptDecryptConverter.class)
     private LocalDateTime updatedAt;
 
     @OneToMany(mappedBy = "collection", cascade = CascadeType.ALL, orphanRemoval = true)

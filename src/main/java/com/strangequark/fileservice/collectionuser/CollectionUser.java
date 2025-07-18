@@ -4,6 +4,7 @@ package com.strangequark.fileservice.collectionuser;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.strangequark.fileservice.collection.Collection;
+import com.strangequark.fileservice.utility.RoleEncryptDecryptConverter;
 import jakarta.persistence.*;
 
 import java.util.UUID;
@@ -32,7 +33,7 @@ public class CollectionUser {
 
     private UUID userId;
 
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = RoleEncryptDecryptConverter.class)
     private CollectionUserRole role;
 
     public UUID getId() {
