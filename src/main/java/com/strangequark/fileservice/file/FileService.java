@@ -391,8 +391,7 @@ public class FileService {
 
 
             // Avoid duplicate users
-            CollectionUser existing = collectionUserRepository.findByUserIdAndCollectionId(userId, collection.getId());
-            if (existing != null) {
+            if (collectionUserRepository.findByUserIdAndCollectionId(userId, collection.getId()) != null) {
                 throw new RuntimeException("User is already part of the collection.");
             }
 
