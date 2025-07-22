@@ -8,6 +8,7 @@ import com.strangequark.fileservice.collectionuser.CollectionUserRepository;
 import com.strangequark.fileservice.collectionuser.CollectionUserRole;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.test.context.ActiveProfiles;
@@ -28,6 +29,14 @@ public class CollectionUserRepositoryTest {
     CollectionUser collectionUser;
     Collection collection;
     UUID userId;
+
+    @Value("${ENCRYPTION_KEY}")
+    String encryptionKey;
+
+    @BeforeAll
+    void setupEncryptionKey() {
+        System.setProperty("ENCRYPTION_KEY", encryptionKey);
+    }
 
     @BeforeEach
     void setup() {

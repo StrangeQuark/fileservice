@@ -3,11 +3,9 @@ package com.strangequark.fileservice.repositorytests;
 import com.strangequark.fileservice.collection.Collection;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.test.context.ActiveProfiles;
@@ -27,6 +25,14 @@ public class MetadataRepositoryTest {
     private MetadataRepository metadataRepository;
 
     Collection collection;
+
+    @Value("${ENCRYPTION_KEY}")
+    String encryptionKey;
+
+    @BeforeAll
+    void setupEncryptionKey() {
+        System.setProperty("ENCRYPTION_KEY", encryptionKey);
+    }
 
     @BeforeEach
     void setup() {
