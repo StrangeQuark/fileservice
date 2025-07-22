@@ -11,6 +11,8 @@ import java.util.Base64;
 public class EncryptionUtility {
     private static final Logger LOGGER = LoggerFactory.getLogger(EncryptionUtility.class);
 
+    private static final String ALGORITHM = "AES";
+
     private static final String ENCRYPTION_KEY = resolveKey();
 
     private static String resolveKey() {
@@ -34,9 +36,9 @@ public class EncryptionUtility {
         try {
             LOGGER.info("Attempting to encrypt data");
 
-            SecretKey key = new SecretKeySpec(ENCRYPTION_KEY.getBytes(), "AES");
+            SecretKey key = new SecretKeySpec(ENCRYPTION_KEY.getBytes(), ALGORITHM);
 
-            Cipher cipher = Cipher.getInstance("AES");
+            Cipher cipher = Cipher.getInstance(ALGORITHM);
             cipher.init(Cipher.ENCRYPT_MODE, key);
 
             LOGGER.info("Data successfully encrypted");
@@ -51,9 +53,9 @@ public class EncryptionUtility {
         try {
             LOGGER.info("Attempting to decrypt data");
 
-            SecretKey key = new SecretKeySpec(ENCRYPTION_KEY.getBytes(), "AES");
+            SecretKey key = new SecretKeySpec(ENCRYPTION_KEY.getBytes(), ALGORITHM);
 
-            Cipher cipher = Cipher.getInstance("AES");
+            Cipher cipher = Cipher.getInstance(ALGORITHM);
             cipher.init(Cipher.DECRYPT_MODE, key);
 
             LOGGER.info("Data successfully decrypted");
