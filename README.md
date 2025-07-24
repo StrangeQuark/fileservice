@@ -13,7 +13,7 @@ It uses AES encryption to protect file contents at rest, and supports organizing
 <br><br><br>
 
 ## Technology Stack
-- Java 17
+- Java 17+
 - Spring Boot
 - PostgreSQL
 - Docker & Docker Compose

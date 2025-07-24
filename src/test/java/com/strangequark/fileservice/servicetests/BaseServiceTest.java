@@ -8,7 +8,7 @@ import com.strangequark.fileservice.collectionuser.CollectionUserRole;// Integra
 import com.strangequark.fileservice.file.FileService;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
-import com.strangequark.fileservice.utility.AuthUtility;
+import com.strangequark.fileservice.utility.AuthUtility;// Integration line: Auth
 import com.strangequark.fileservice.utility.JwtUtility;// Integration line: Auth
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
