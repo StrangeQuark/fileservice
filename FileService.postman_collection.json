@@ -7,6 +7,27 @@
 	},
 	"item": [
 		{
+			"name": "Healthcheck",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:6010/api/file/health",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "6010",
+					"path": [
+						"api",
+						"file",
+						"health"
+					]
+				}
+			},
+			"response": []
+		},
+		{
 			"name": "Create collection",
 			"request": {
 				"auth": {
