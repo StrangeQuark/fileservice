@@ -26,6 +26,7 @@ services:
       - SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE=${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - ACCESS_SECRET_KEY=${ACCESS_SECRET_KEY} # Integration line: Auth
+      - SERVICE_SECRET_FILE=${SERVICE_SECRET_FILE}  # Integration line: Auth
   file-db:
     image: 'postgres:13.1-alpine'
     container_name: file-db
