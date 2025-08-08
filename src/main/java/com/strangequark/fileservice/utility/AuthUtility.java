@@ -63,8 +63,6 @@ public class AuthUtility {
 
             String accessToken = authenticateServiceAccount();
 
-            LOGGER.info("Access token: " + accessToken);
-
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(accessToken);
 
