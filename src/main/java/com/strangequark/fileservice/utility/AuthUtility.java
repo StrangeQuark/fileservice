@@ -42,10 +42,6 @@ public class AuthUtility {
             response = response.replace("\"", "");
             response = response.replace("}", "");
 
-            LOGGER.info(response);
-            LOGGER.info((response.indexOf("jwtToken:") + 9) + "");
-            LOGGER.info(String.valueOf(response.contains("jwtToken")));
-
             if(!response.contains("jwtToken"))
                 throw new RuntimeException("jwtToken not found in authentication response");
 
