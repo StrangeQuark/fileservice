@@ -55,6 +55,11 @@ public class FileController {
     }
 
     // Integration function start: Auth
+    @GetMapping("/get-current-user-role/{collectionName}")
+    public ResponseEntity<?> getCurrentUserRole(@PathVariable String collectionName) {
+        return fileService.getCurrentUserRole(collectionName);
+    }
+
     @PostMapping("/add-user-to-collection")
     public ResponseEntity<?> addUserToCollection(@RequestBody CollectionUserRequest collectionUserRequest) {
         return fileService.addUserToCollection(collectionUserRequest);
