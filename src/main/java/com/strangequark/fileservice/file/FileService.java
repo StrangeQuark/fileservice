@@ -367,6 +367,27 @@ public class FileService {
     }
 
     // Integration function start: Auth
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> getCurrentUserRole(String collectionName) {
+        LOGGER.info("Attempting to retrieve current user's role");
+
+        try {
+            Collection collection = collectionRepository.findByName(collectionName)
+                    .orElseThrow(() -> new RuntimeException("Collection with this name does not exist"));
+
+            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId());
+
+            if (requestingUser == null) {
+                throw new RuntimeException("User not found");
+            }
+
+            return ResponseEntity.ok(requestingUser.getRole());
+        } catch(RuntimeException ex) {
+            LOGGER.error(ex.getMessage());
+            return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
+        }
+    }
+
     @Transactional(readOnly = false)
     public ResponseEntity<?> addUserToCollection(CollectionUserRequest collectionUserRequest) {
         LOGGER.info("Attempting to add user to collection");
