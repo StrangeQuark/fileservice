@@ -70,12 +70,8 @@ public class FileService {
                     .orElseThrow(() -> new RuntimeException("Collection not found when getting all files"));
 
             // Integration function start: Auth
-            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId());
-
-            // Ensure that the request user has access to this collection
-            if (requestingUser == null) {
-                throw new RuntimeException("Only users part of this collection can retrieve files list");
-            }// Integration function end: Auth
+            collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
+                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));// Integration function end: Auth
 
             List<Metadata> filesMetadata = metadataRepository.findByCollectionId(collection.getId());
 
@@ -102,11 +98,14 @@ public class FileService {
                     .orElseThrow(() -> new RuntimeException("Collection not found when deleting file"));
 
             // Integration function start: Auth
-            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId());
+            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
+                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));
 
-            // Ensure that the request user has access to this collection and has the OWNER or READWRITE role
-            if (requestingUser == null || (requestingUser.getRole() != CollectionUserRole.OWNER && requestingUser.getRole() != CollectionUserRole.READ_WRITE)) {
-                throw new RuntimeException("Only collection users with OWNER or READWRITE roles can delete files");
+            // Ensure that the requesting user has the OWNER, MANAGER, or READWRITE role
+            if (requestingUser.getRole() != CollectionUserRole.OWNER
+                    && requestingUser.getRole() != CollectionUserRole.MANAGER
+                    && requestingUser.getRole() != CollectionUserRole.READ_WRITE) {
+                throw new RuntimeException("Only collection users with OWNER, MANAGER, or READWRITE roles can delete files");
             }// Integration function end: Auth
 
             Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
@@ -138,12 +137,8 @@ public class FileService {
                     .orElseThrow(() -> new RuntimeException("Collection not found"));
 
             // Integration function start: Auth
-            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId());
-
-            // Ensure that the request user has access to this collection
-            if (requestingUser == null) {
-                throw new RuntimeException("Only users part of this collection can download files");
-            }// Integration function end: Auth
+            collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
+                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));// Integration function end: Auth
 
             Path filePath = uploadDir.resolve(metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getFileUUID());
 
@@ -178,12 +173,8 @@ public class FileService {
                     .orElseThrow(() -> new RuntimeException("Unable to locate collection when streaming file"));
 
             // Integration function start: Auth
-            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId());
-
-            // Ensure that the request user has access to this collection
-            if (requestingUser == null) {
-                throw new RuntimeException("Only users part of this collection can stream files");
-            }// Integration function end: Auth
+            collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
+                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));// Integration function end: Auth
 
             Optional<String> fileUUID = metadataRepository
                     .findByCollectionIdAndFileName(collection.getId(), fileName)
@@ -254,11 +245,14 @@ public class FileService {
                     .orElseThrow(() -> new RuntimeException("Collection not found"));
 
             // Integration function start: Auth
-            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId());
+            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
+                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));
 
-            // Ensure that the request user has access to this collection and has the OWNER or READWRITE role
-            if (requestingUser == null || (requestingUser.getRole() != CollectionUserRole.OWNER && requestingUser.getRole() != CollectionUserRole.READ_WRITE)) {
-                throw new RuntimeException("Only collection users with OWNER or READWRITE roles can upload files");
+            // Ensure that the requesting user has the OWNER, MANAGER, or READWRITE role
+            if (requestingUser.getRole() != CollectionUserRole.OWNER
+                    && requestingUser.getRole() != CollectionUserRole.MANAGER
+                    && requestingUser.getRole() != CollectionUserRole.READ_WRITE) {
+                throw new RuntimeException("Only collection users with OWNER, MANAGER, or READWRITE roles can upload files");
             }// Integration function end: Auth
 
             String fileUUID = UUID.randomUUID().toString();
@@ -339,10 +333,11 @@ public class FileService {
                     .orElseThrow(() -> new RuntimeException("Unable to locate collection when attempting to delete"));
 
             // Integration function start: Auth
-            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId());
+            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
+                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));
 
             // Ensure that the request user has access to this collection and has the OWNER role
-            if (requestingUser == null || requestingUser.getRole() != CollectionUserRole.OWNER) {
+            if (requestingUser.getRole() != CollectionUserRole.OWNER) {
                 throw new RuntimeException("Only collection OWNERs can delete collections.");
             }// Integration function end: Auth
 
@@ -375,14 +370,97 @@ public class FileService {
             Collection collection = collectionRepository.findByName(collectionName)
                     .orElseThrow(() -> new RuntimeException("Collection with this name does not exist"));
 
-            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId());
-
-            if (requestingUser == null) {
-                throw new RuntimeException("User not found");
-            }
+            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
+                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));
 
             return ResponseEntity.ok(requestingUser.getRole());
         } catch(RuntimeException ex) {
+            LOGGER.error(ex.getMessage());
+            return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> getUsersByCollection(String collectionName) {
+        LOGGER.info("Attempting to retrieve users by collection");
+
+        try {
+            Collection collection = collectionRepository.findByName(collectionName)
+                    .orElseThrow(() -> new RuntimeException("Collection with this name does not exist"));
+
+            collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
+                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));
+
+            List<CollectionUser> users = collectionUserRepository.findAllByCollectionId(collection.getId());
+
+            LOGGER.info("User list retrieval successful");
+            return ResponseEntity.ok(users);
+        } catch(RuntimeException ex) {
+            LOGGER.error(ex.getMessage());
+            return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
+        }
+    }
+
+    public ResponseEntity<?> getAllRoles() {
+        LOGGER.info("Attempting to retrieve all Collection User roles");
+
+        return ResponseEntity.ok(CollectionUserRole.values());
+    }
+
+    @Transactional
+    public ResponseEntity<?> updateUserRole(CollectionUserRequest collectionUserRequest) {
+        LOGGER.info("Attempting to update user's role");
+
+        try {
+            Collection collection = collectionRepository.findByName(collectionUserRequest.getCollectionName())
+                    .orElseThrow(() -> new RuntimeException("Collection with this name does not exist"));
+
+            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
+                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));
+
+            // Ensure that the request user has the OWNER or MANAGER role
+            if (requestingUser.getRole() != CollectionUserRole.OWNER && requestingUser.getRole() != CollectionUserRole.MANAGER) {
+                throw new RuntimeException("Only collection users with OWNER or MANAGER roles can update user roles");
+            }
+
+            // Ensure only OWNER users can promote other users to OWNER
+            if (collectionUserRequest.getRole() == CollectionUserRole.OWNER && requestingUser.getRole() != CollectionUserRole.OWNER) {
+                throw new RuntimeException("Only OWNERs can promote other users to OWNER");
+            }
+
+            // Ensure the target user exists
+            String userIdStr = authUtility.getUserId(collectionUserRequest.getUsername());
+            if (userIdStr == null) {
+                throw new RuntimeException("Unable to retrieve user id");
+            }
+            UUID userId = UUID.fromString(userIdStr);
+
+            CollectionUser targetUser = collectionUserRepository.findByUserIdAndCollectionId(userId, collection.getId())
+                    .orElseThrow(() -> new RuntimeException("Target user is not part of this collection"));
+
+            // If the target user is OWNER, requesting user must also be OWNER
+            if(targetUser.getRole() == CollectionUserRole.OWNER && requestingUser.getRole() != CollectionUserRole.OWNER) {
+                throw new RuntimeException("Only OWNERs can change the roles of other OWNERs");
+            }
+
+            // If the target user has an OWNER role, we must ensure that we're not removing the last OWNER from the collection
+            if(targetUser.getRole() == CollectionUserRole.OWNER) {
+                long ownerCount = collection.getCollectionUsers().stream()
+                        .filter(cu -> cu.getRole() == CollectionUserRole.OWNER)
+                        .count();
+
+                if (ownerCount <= 1) {
+                    throw new RuntimeException("Cannot remove the last OWNER from the collection.");
+                }
+            }
+
+            //Update the target user's role
+            targetUser.setRole(collectionUserRequest.getRole());
+            collectionUserRepository.save(targetUser);
+
+            LOGGER.info("User role successfully updated");
+            return ResponseEntity.ok("User role successfully updated");
+        } catch (Exception ex) {
             LOGGER.error(ex.getMessage());
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
@@ -396,11 +474,12 @@ public class FileService {
             Collection collection = collectionRepository.findByName(collectionUserRequest.getCollectionName())
                     .orElseThrow(() -> new RuntimeException("Collection with this name does not exist"));
 
-            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId());
+            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
+                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));
 
-            // Ensure that the request user has access to this collection and has the OWNER role
-            if (requestingUser == null || requestingUser.getRole() != CollectionUserRole.OWNER) {
-                throw new RuntimeException("Only collection OWNERs can add new users.");
+            // Ensure that the request user has access to this collection and has the OWNER or MANAGER role
+            if (requestingUser.getRole() != CollectionUserRole.OWNER && requestingUser.getRole() != CollectionUserRole.MANAGER) {
+                throw new RuntimeException("Only collection OWNERs and MANAGERs can add new users.");
             }
 
             // Ensure the target user exists
@@ -412,7 +491,7 @@ public class FileService {
 
 
             // Avoid duplicate users
-            if (collectionUserRepository.findByUserIdAndCollectionId(userId, collection.getId()) != null) {
+            if (collectionUserRepository.findByUserIdAndCollectionId(userId, collection.getId()).isPresent()) {
                 throw new RuntimeException("User is already part of the collection.");
             }
 
@@ -436,12 +515,8 @@ public class FileService {
             Collection collection = collectionRepository.findByName(collectionUserRequest.getCollectionName())
                     .orElseThrow(() -> new RuntimeException("Collection with this name does not exist"));
 
-            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId());
-
-            // Check if the user making the request belongs to the collection
-            if (requestingUser == null) {
-                throw new RuntimeException("Requesting user does not have access to this collection");
-            }
+            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
+                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));
 
             // Ensure the target user exists
             String userIdStr = authUtility.getUserId(collectionUserRequest.getUsername());
@@ -450,16 +525,14 @@ public class FileService {
             }
             UUID userId = UUID.fromString(userIdStr);
 
-            CollectionUser targetUser = collectionUserRepository.findByUserIdAndCollectionId(userId, collection.getId());
+            CollectionUser targetUser = collectionUserRepository.findByUserIdAndCollectionId(userId, collection.getId())
+                    .orElseThrow(() -> new RuntimeException("Target user is not part of this collection"));
 
-            // Check if the target user of the request belongs to the collection
-            if (targetUser == null) {
-                throw new RuntimeException("Target user is not part of this collection.");
-            }
-
-            // Check if the requesting user is either attempting to remove self or is an OWNER
-            if(!requestingUser.getUserId().equals(targetUser.getUserId()) && requestingUser.getRole() != CollectionUserRole.OWNER) {
-                throw new RuntimeException("Only OWNER users can remove others");
+            // Check if the requesting user is either attempting to remove self or is an OWNER or MANAGER
+            if(!requestingUser.getUserId().equals(targetUser.getUserId())
+                    && requestingUser.getRole() != CollectionUserRole.OWNER
+                    && requestingUser.getRole() != CollectionUserRole.MANAGER) {
+                throw new RuntimeException("Only OWNERs and MANAGERs can remove others");
             }
 
             // If the target user has an OWNER role, we must ensure that we're not removing the last OWNER from the collection

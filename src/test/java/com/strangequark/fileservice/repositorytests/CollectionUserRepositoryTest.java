@@ -50,7 +50,8 @@ public class CollectionUserRepositoryTest {
 
     @Test
     void findByUserIdAndCollectionIdTest() {
-        CollectionUser c = collectionUserRepository.findByUserIdAndCollectionId(userId, collection.getId());
+        CollectionUser c = collectionUserRepository.findByUserIdAndCollectionId(userId, collection.getId())
+                .orElseThrow(Assertions.fail("User not found"));
 
         Assertions.assertNotEquals(null, c);
         Assertions.assertEquals(collectionUser, c);
@@ -69,6 +70,6 @@ public class CollectionUserRepositoryTest {
         collectionUserRepository.deleteCollectionUser(userId, collection.getId());
 
         Assertions.assertTrue(collection.getCollectionUsers().isEmpty());
-        Assertions.assertNull(collectionUserRepository.findByUserIdAndCollectionId(userId, collection.getId()));
+        Assertions.assertTrue(collectionUserRepository.findByUserIdAndCollectionId(userId, collection.getId()).isEmpty());
     }
 }
