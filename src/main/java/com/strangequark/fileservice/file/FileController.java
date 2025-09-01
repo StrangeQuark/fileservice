@@ -60,6 +60,21 @@ public class FileController {
         return fileService.getCurrentUserRole(collectionName);
     }
 
+    @GetMapping("/get-users-by-collection/{collectionName}")
+    public ResponseEntity<?> getUsersByCollection(@PathVariable String collectionName) {
+        return fileService.getUsersByCollection(collectionName);
+    }
+
+    @GetMapping("/get-all-roles")
+    public ResponseEntity<?> getAllRoles() {
+        return fileService.getAllRoles();
+    }
+
+    @PostMapping("/update-user-role")
+    public ResponseEntity<?> updateUserRole(@RequestBody CollectionUserRequest collectionUserRequest) {
+        return fileService.updateUserRole(collectionUserRequest);
+    }
+
     @PostMapping("/add-user-to-collection")
     public ResponseEntity<?> addUserToCollection(@RequestBody CollectionUserRequest collectionUserRequest) {
         return fileService.addUserToCollection(collectionUserRequest);
