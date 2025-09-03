@@ -11,13 +11,11 @@ import com.strangequark.fileservice.metadata.MetadataRepository;
 import com.strangequark.fileservice.utility.AuthUtility;// Integration line: Auth
 import com.strangequark.fileservice.utility.JwtUtility;// Integration line: Auth
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.TestInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
@@ -35,6 +33,10 @@ import static org.mockito.Mockito.when;// Integration line: Auth
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ActiveProfiles("test")
 public abstract class BaseServiceTest {
+    static {
+        System.setProperty("ENCRYPTION_KEY", "AA1A2A8C0E4F76FB3C13F66225AAAC42");
+    }
+
     Logger LOGGER = LoggerFactory.getLogger(BaseServiceTest.class);
 
     @Autowired
@@ -58,14 +60,6 @@ public abstract class BaseServiceTest {
 
     @Autowired
     public FileService fileService;
-
-    @Value("${ENCRYPTION_KEY}")
-    String encryptionKey;
-
-    @BeforeAll
-    void setupEncryptionKey() {
-        System.setProperty("ENCRYPTION_KEY", encryptionKey);
-    }
 
     @BeforeEach
     void setup() {
