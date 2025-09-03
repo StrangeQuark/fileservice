@@ -8,6 +8,5 @@ import java.util.UUID;
 
 public interface CollectionRepository extends JpaRepository<Collection, UUID> {
     Optional<Collection> findByName(String name);
-    boolean existsByName(String name);
     List<Collection> findAll();
 }

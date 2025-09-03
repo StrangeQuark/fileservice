@@ -292,7 +292,7 @@ public class FileService {
         LOGGER.info("Attempting to create new collection");
 
         try {
-            if(collectionRepository.existsByName(collectionName))
+            if(collectionRepository.findByName(collectionName).isPresent())
                 throw new RuntimeException("Collection with this name already exists");
 
             Collection newCollection = new Collection(collectionName);
