@@ -44,8 +44,6 @@ public class CollectionUserRepositoryTest {
 
     @Test
     void findByUserIdAndCollectionIdTest() {
-        List<CollectionUser> users = collectionUserRepository.findAllByCollectionId(collection.getId());
-
         CollectionUser c = collectionUserRepository.findByUserIdAndCollectionId(userId, collection.getId())
                 .orElseThrow(() -> new AssertionError("User not found"));
 
