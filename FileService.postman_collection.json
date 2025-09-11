@@ -1,7 +1,7 @@
 {
 	"info": {
 		"_postman_id": "7fd84137-f5c0-4056-9d20-f9557d77743f",
-		"name": "FileService",
+		"name": "FileService2",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "29355577"
 	},
@@ -22,111 +22,6 @@
 						"api",
 						"file",
 						"health"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "Create collection",
-			"request": {
-				"auth": {
-					"type": "bearer",
-					"bearer": [
-						{
-							"key": "token",
-							"value": "{{ACCESS_TOKEN}}",
-							"type": "string"
-						}
-					]
-				},
-				"method": "POST",
-				"header": [],
-				"url": {
-					"raw": "http://localhost:6010/api/file/new-collection/testCollection",
-					"protocol": "http",
-					"host": [
-						"localhost"
-					],
-					"port": "6010",
-					"path": [
-						"api",
-						"file",
-						"new-collection",
-						"testCollection"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "Get all collections",
-			"request": {
-				"auth": {
-					"type": "bearer",
-					"bearer": [
-						{
-							"key": "token",
-							"value": "{{ACCESS_TOKEN}}",
-							"type": "string"
-						}
-					]
-				},
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "http://localhost:6010/api/file/get-all-collections",
-					"protocol": "http",
-					"host": [
-						"localhost"
-					],
-					"port": "6010",
-					"path": [
-						"api",
-						"file",
-						"get-all-collections"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "Upload",
-			"request": {
-				"auth": {
-					"type": "bearer",
-					"bearer": [
-						{
-							"key": "token",
-							"value": "{{ACCESS_TOKEN}}",
-							"type": "string"
-						}
-					]
-				},
-				"method": "POST",
-				"header": [],
-				"body": {
-					"mode": "formdata",
-					"formdata": [
-						{
-							"key": "file",
-							"type": "file",
-							"src": "/home/strangequark/Desktop/Game helpers/england2025.txt"
-						}
-					]
-				},
-				"url": {
-					"raw": "http://localhost:6010/api/file/upload/testCollection",
-					"protocol": "http",
-					"host": [
-						"localhost"
-					],
-					"port": "6010",
-					"path": [
-						"api",
-						"file",
-						"upload",
-						"testCollection"
 					]
 				}
 			},
@@ -198,6 +93,144 @@
 			"response": []
 		},
 		{
+			"name": "Stream file",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{ACCESS_TOKEN}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:6010/api/file/stream/testCollection/v1.webm",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "6010",
+					"path": [
+						"api",
+						"file",
+						"stream",
+						"testCollection",
+						"v1.webm"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Upload",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{ACCESS_TOKEN}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "file",
+							"type": "file",
+							"src": "/home/strangequark/Desktop/Game helpers/england2025.txt"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:6010/api/file/upload/testCollection",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "6010",
+					"path": [
+						"api",
+						"file",
+						"upload",
+						"testCollection"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create collection",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{ACCESS_TOKEN}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:6010/api/file/new-collection/testCollection",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "6010",
+					"path": [
+						"api",
+						"file",
+						"new-collection",
+						"testCollection"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get all collections",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{ACCESS_TOKEN}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:6010/api/file/get-all-collections",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "6010",
+					"path": [
+						"api",
+						"file",
+						"get-all-collections"
+					]
+				}
+			},
+			"response": []
+		},
+		{
 			"name": "Delete file",
 			"request": {
 				"auth": {
@@ -257,6 +290,141 @@
 						"file",
 						"delete-collection",
 						"testCollection"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get current user role",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{ACCESS_TOKEN}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:6010/api/file/get-current-user-role/testCollection",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "6010",
+					"path": [
+						"api",
+						"file",
+						"get-current-user-role",
+						"testCollection"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get users by collection",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{ACCESS_TOKEN}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:6010/api/file/get-users-by-collection/testCollection",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "6010",
+					"path": [
+						"api",
+						"file",
+						"get-users-by-collection",
+						"testCollection"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get all roles",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{ACCESS_TOKEN}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:6010/api/file/get-all-roles",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "6010",
+					"path": [
+						"api",
+						"file",
+						"get-all-roles"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update user role",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{ACCESS_TOKEN}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"collectionName\": \"testCollection\",\n    \"username\": \"testUser1\",\n    \"role\": \"READ_WRITE\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:6010/api/file/update-user-role",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "6010",
+					"path": [
+						"api",
+						"file",
+						"update-user-role"
 					]
 				}
 			},
