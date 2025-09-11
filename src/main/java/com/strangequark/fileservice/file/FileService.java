@@ -256,7 +256,13 @@ public class FileService {
             }// Integration function end: Auth
 
             String fileUUID = UUID.randomUUID().toString();
-            String fileExtension = file.getOriginalFilename().substring(file.getOriginalFilename().lastIndexOf("."));
+            String originalName = file.getOriginalFilename();
+
+            String fileExtension = "";
+            if (originalName != null && originalName.contains(".")) {
+                fileExtension = originalName.substring(originalName.lastIndexOf("."));
+            }
+
             Path filePath = uploadDir.resolve(fileUUID + fileExtension);
 
             CipherOutputStream cipherOut = new CipherOutputStream(Files.newOutputStream(filePath), getCipher(Cipher.ENCRYPT_MODE));
