@@ -1,7 +1,7 @@
 package com.strangequark.fileservice.servicetests;
 
 import com.strangequark.fileservice.collection.Collection;
-import com.strangequark.fileservice.collectionuser.CollectionUser;
+import com.strangequark.fileservice.collectionuser.CollectionUser;// Integration line: Auth
 import com.strangequark.fileservice.collectionuser.CollectionUserRequest;// Integration line: Auth
 import com.strangequark.fileservice.collectionuser.CollectionUserRole;// Integration line: Auth
 import com.strangequark.fileservice.metadata.Metadata;
@@ -11,7 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
 
-import javax.crypto.Cipher;
 import java.io.File;
 import java.util.Arrays;
 import java.util.List;
