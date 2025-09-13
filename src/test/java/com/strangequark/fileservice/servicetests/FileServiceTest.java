@@ -115,7 +115,6 @@ public class FileServiceTest extends BaseServiceTest {
         Assertions.assertEquals(200, response.getStatusCode().value());
         Assertions.assertFalse(collectionRepository.findByName(collectionName).isPresent());
     }
-
     // Integration function start: Auth
     @Test
     void getCurrentUserRoleTest() {
