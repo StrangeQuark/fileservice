@@ -53,7 +53,6 @@ public class FileController {
     public ResponseEntity<?> deleteCollection(@PathVariable String collectionName) {
         return fileService.deleteCollection(collectionName);
     }
-
     // Integration function start: Auth
     @GetMapping("/get-current-user-role/{collectionName}")
     public ResponseEntity<?> getCurrentUserRole(@PathVariable String collectionName) {

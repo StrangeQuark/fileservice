@@ -49,8 +49,8 @@ public class Collection {
     @OneToMany(mappedBy = "collection", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
     private List<Metadata> metadataList;
-
-    @OneToMany(mappedBy = "collection", cascade = CascadeType.ALL, orphanRemoval = true)// Integration function start: Auth
+    // Integration function start: Auth
+    @OneToMany(mappedBy = "collection", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
     private List<CollectionUser> collectionUsers;// Integration function end: Auth
 
@@ -104,7 +104,6 @@ public class Collection {
     public void setMetadataList(List<Metadata> metadataList) {
         this.metadataList = metadataList;
     }
-
     // Integration function start: Auth
     public List<CollectionUser> getCollectionUsers() {
         return collectionUsers;

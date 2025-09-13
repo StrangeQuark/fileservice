@@ -51,7 +51,6 @@ public abstract class BaseServiceTest {
     public AuthUtility authUtility;
     public UUID testUserId = UUID.randomUUID();// Integration function end: Auth
 
-
     public Collection collection;
     public MockMultipartFile mockMultipartFile;
     public String collectionName;
