@@ -556,6 +556,76 @@ public class FileService {
             LOGGER.error(ex.getMessage());
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
+    }
+
+    @Transactional(readOnly = false)
+    public ResponseEntity<?> deleteUserByIdFromAllCollections(String id) {
+        LOGGER.info("Attempting to delete user from all collections");
+
+        try {
+            UUID userId = UUID.fromString(id);
+
+            List<Collection> collections = collectionUserRepository.findCollectionsByUserId(userId);
+
+            List<Map<String, String>> errors = new ArrayList<>();
+
+            // First run through each collection to verify user is being properly removed
+            for(Collection collection : collections) {
+                CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
+                        .orElseGet(() -> {
+                            errors.add(Map.of(collection.getName(), "Requesting user does not have access to this collection"));
+                            return null;
+                        });
+
+                if(requestingUser == null)
+                    continue;
+
+                CollectionUser targetUser = collectionUserRepository.findByUserIdAndCollectionId(userId, collection.getId())
+                        .orElseGet(() -> {
+                            errors.add(Map.of(collection.getName(), "Target user is not part of this collection"));
+                            return null;
+                        });
+
+                if(targetUser == null)
+                    continue;
+
+                // Check if the requesting user is either attempting to remove self or is an OWNER or MANAGER
+                if(!requestingUser.getUserId().equals(targetUser.getUserId())
+                        && requestingUser.getRole() != CollectionUserRole.OWNER
+                        && requestingUser.getRole() != CollectionUserRole.MANAGER) {
+                    errors.add(Map.of(collection.getName(), "Only OWNERs and MANAGERs can remove others"));
+                    continue;
+                }
+
+                // If the target user has an OWNER role, we must ensure that we're not removing the last OWNER from the collection
+                if(targetUser.getRole() == CollectionUserRole.OWNER) {
+                    long ownerCount = collection.getCollectionUsers().stream()
+                            .filter(cu -> cu.getRole() == CollectionUserRole.OWNER)
+                            .count();
+
+                    if (ownerCount <= 1) {
+                        errors.add(Map.of(collection.getName(), "Cannot remove the last OWNER from the collection"));
+                    }
+                }
+            }
+
+            // If there were errors, return
+            if(!errors.isEmpty()) {
+                LOGGER.error("Error when trying to remove user from all collections");
+                return ResponseEntity.status(400).body(errors);
+            }
+
+            // If all checks pass, remove user from all collections
+            for(Collection collection : collections) {
+                collectionUserRepository.deleteCollectionUser(userId, collection.getId());
+            }
+
+            LOGGER.info("User successfully deleted from all collections");
+            return ResponseEntity.ok("User successfully deleted from all collections");
+        } catch(RuntimeException ex) {
+            LOGGER.error(ex.getMessage());
+            return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
+        }
     }// Integration function end: Auth
 
     private Cipher getCipher(int mode) throws Exception {
