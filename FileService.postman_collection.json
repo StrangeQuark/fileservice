@@ -509,6 +509,46 @@
 				}
 			},
 			"response": []
+		},
+		{
+			"name": "Delete User from all Collections",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{ACCESS_TOKEN}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"username\": \"testUser1\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:6010/api/file/delete-user-from-all-collections",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "6010",
+					"path": [
+						"api",
+						"file",
+						"delete-user-from-all-collections"
+					]
+				}
+			},
+			"response": []
 		}
 	]
 }
