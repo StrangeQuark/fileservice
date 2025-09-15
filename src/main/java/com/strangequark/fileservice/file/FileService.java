@@ -559,11 +559,16 @@ public class FileService {
     }
 
     @Transactional(readOnly = false)
-    public ResponseEntity<?> deleteUserByIdFromAllCollections(String id) {
+    public ResponseEntity<?> deleteUserFromAllCollections(CollectionUserRequest collectionUserRequest) {
         LOGGER.info("Attempting to delete user from all collections");
 
         try {
-            UUID userId = UUID.fromString(id);
+            // Ensure the target user exists
+            String userIdStr = authUtility.getUserId(collectionUserRequest.getUsername());
+            if (userIdStr == null) {
+                throw new RuntimeException("Unable to retrieve user id");
+            }
+            UUID userId = UUID.fromString(userIdStr);
 
             List<Collection> collections = collectionUserRepository.findCollectionsByUserId(userId);
 

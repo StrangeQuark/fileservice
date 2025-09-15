@@ -84,8 +84,8 @@ public class FileController {
         return fileService.deleteUserFromCollection(collectionUserRequest);
     }
 
-    @PostMapping("/delete-user-by-id-from-all-collections")
-    public ResponseEntity<?> deleteUserByIdFromAllCollections(@RequestBody String id) {
-        return fileService.deleteUserByIdFromAllCollections(id);
+    @PostMapping("/delete-user-from-all-collections")
+    public ResponseEntity<?> deleteUserFromAllCollections(@RequestBody CollectionUserRequest collectionUserRequest) {
+        return fileService.deleteUserFromAllCollections(collectionUserRequest);
     }// Integration function end: Auth
 }
