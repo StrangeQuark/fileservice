@@ -208,5 +208,27 @@ public class FileServiceTest extends BaseServiceTest {
 
         Assertions.assertEquals(200, response.getStatusCode().value());
         Assertions.assertTrue(collectionUserRepository.findByUserIdAndCollectionId(testUserUUID, collection.getId()).isEmpty());
+    }
+
+    @Test
+    void deleteUserFromAllCollectionsTest() {
+        LOGGER.info("Begin deleteUserFromAllCollectionsTest");
+
+        // We must first add a user to the collection
+        UUID testUserUUID = UUID.randomUUID();
+        CollectionUserRequest request = new CollectionUserRequest(collectionName, "testUser", CollectionUserRole.READ_WRITE);
+
+        when(authUtility.getUserId(request.getUsername())).thenReturn(String.valueOf(testUserUUID));
+
+        ResponseEntity<?> response = fileService.addUserToCollection(request);
+
+        Assertions.assertEquals(200, response.getStatusCode().value());
+        Assertions.assertNotNull(collectionUserRepository.findByUserIdAndCollectionId(testUserUUID, collection.getId()));
+
+        // User is added, now let's delete
+        response = fileService.deleteUserFromAllCollections(request);
+
+        Assertions.assertEquals(200, response.getStatusCode().value());
+        Assertions.assertTrue(collectionUserRepository.findByUserIdAndCollectionId(testUserUUID, collection.getId()).isEmpty());
     }// Integration function end: Auth
 }
