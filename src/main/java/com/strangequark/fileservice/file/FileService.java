@@ -609,7 +609,11 @@ public class FileService {
                             .count();
 
                     if (ownerCount <= 1) {
-                        errors.add(Map.of(collection.getName(), "Cannot remove the last OWNER from the collection"));
+                        // If the user being deleted is the only user in the collection, just delete the collection
+                        if(collection.getCollectionUsers().size() == 1)
+                            collectionRepository.delete(collection);
+                        else
+                            errors.add(Map.of(collection.getName(), "Cannot remove the last OWNER from the collection"));
                     }
                 }
             }
