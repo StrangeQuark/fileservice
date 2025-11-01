@@ -161,7 +161,8 @@ public class FileService {
             telemetryUtility.sendTelemetryEvent("file-download",
                     true, // Integration line: Auth
                     Map.of(
-                            "file-id", metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getId()
+                            "file-id", metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getId(),
+                            "downloaded-at", LocalDateTime.now()
                     )
             ); // Integration function end: Telemetry
 
@@ -221,6 +222,8 @@ public class FileService {
             headers.setContentDisposition(ContentDisposition.inline().filename(fileName).build());
             headers.setContentLength(decryptedBytes.length);
 
+            ResponseEntity<?> response;
+
             if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
                 String[] ranges = rangeHeader.replace("bytes=", "").split("-");
                 long start = Long.parseLong(ranges[0]);
@@ -237,15 +240,25 @@ public class FileService {
                 headers.set("Accept-Ranges", "bytes");
 
                 LOGGER.info("Stream file successfully sent with partial content");
-                return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                response =  ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
                         .headers(headers)
                         .body(partial);
+            } else {
+                LOGGER.info("Stream file successfully sent");
+                response = ResponseEntity.ok()
+                        .headers(headers)
+                        .body(decryptedBytes);
             }
+            // Integration function start: Telemetry
+            telemetryUtility.sendTelemetryEvent("file-stream",
+                    true, // Integration line: Auth
+                    Map.of(
+                            "file-id", metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getId(),
+                            "streamed-at", LocalDateTime.now()
+                    )
+            ); // Integration function end: Telemetry
 
-            LOGGER.info("Stream file successfully sent");
-            return ResponseEntity.ok()
-                    .headers(headers)
-                    .body(decryptedBytes);
+            return response;
         } catch (IOException ex) {
             LOGGER.error("File streaming failed");
             LOGGER.error(ex.getMessage());
@@ -511,6 +524,15 @@ public class FileService {
             //Update the target user's role
             targetUser.setRole(collectionUserRequest.getRole());
             collectionUserRepository.save(targetUser);
+            // Integration function start: Telemetry
+            telemetryUtility.sendTelemetryEvent("file-update-user-role",
+                    true, // Integration line: Auth
+                    Map.of(
+                            "updated-user-id", targetUser.getId(),
+                            "new-role", collectionUserRequest.getRole(),
+                            "updated-at", LocalDateTime.now()
+                    )
+            ); // Integration function end: Telemetry
 
             LOGGER.info("User role successfully updated");
             return ResponseEntity.ok("User role successfully updated");
@@ -550,8 +572,16 @@ public class FileService {
             }
 
             collection.addUser(new CollectionUser(collection, userId, collectionUserRequest.getRole()));
-
             collectionRepository.save(collection);
+            // Integration function start: Telemetry
+            telemetryUtility.sendTelemetryEvent("file-add-user-to-collection",
+                    true, // Integration line: Auth
+                    Map.of(
+                            "added-user-id", userId,
+                            "collection-id", collection.getId(),
+                            "updated-at", LocalDateTime.now()
+                    )
+            ); // Integration function end: Telemetry
 
             LOGGER.info("User successfully added to collection");
             return ResponseEntity.ok("User successfully added to collection");
@@ -601,6 +631,14 @@ public class FileService {
             }
 
             collectionUserRepository.deleteCollectionUser(userId, collection.getId());
+            // Integration function start: Telemetry
+            telemetryUtility.sendTelemetryEvent("file-delete-user-from-collection",
+                    true, // Integration line: Auth
+                    Map.of(
+                            "deleted-user-id", targetUser.getId(),
+                            "deleted-at", LocalDateTime.now()
+                    )
+            ); // Integration function end: Telemetry
 
             LOGGER.info("User successfully deleted from collection");
             return ResponseEntity.ok("User successfully deleted from collection");
@@ -680,6 +718,15 @@ public class FileService {
             for(Collection collection : collections) {
                 collectionUserRepository.deleteCollectionUser(userId, collection.getId());
             }
+            // Integration function start: Telemetry
+            telemetryUtility.sendTelemetryEvent("file-delete-user-from-all-collections",
+                    true, // Integration line: Auth
+                    Map.of(
+                            "deleted-user-id", userId,
+                            "deleted-from-collections", collections,
+                            "deleted-at", LocalDateTime.now()
+                    )
+            ); // Integration function end: Telemetry
 
             LOGGER.info("User successfully deleted from all collections");
             return ResponseEntity.ok("User successfully deleted from all collections");
