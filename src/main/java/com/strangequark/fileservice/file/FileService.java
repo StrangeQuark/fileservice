@@ -12,6 +12,7 @@ import com.strangequark.fileservice.metadata.MetadataRepository;
 import com.strangequark.fileservice.response.UploadResponse;
 import com.strangequark.fileservice.utility.AuthUtility;// Integration line: Auth
 import com.strangequark.fileservice.utility.JwtUtility;// Integration line: Auth
+import com.strangequark.fileservice.utility.TelemetryUtility;// Integration line: Telemetry
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +34,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;// Integration line: Telemetry
 import java.util.*;
 
 @Service
@@ -45,12 +47,18 @@ public class FileService {
 
     @Value("${ENCRYPTION_KEY}")
     private String encryptionKey;
-    @Autowired// Integration function start: Auth
+    // Integration function start: Auth
+    @Autowired
     private CollectionUserRepository collectionUserRepository;
     @Autowired
     JwtUtility jwtUtility;
     @Autowired
-    AuthUtility authUtility;// Integration function end: Auth
+    AuthUtility authUtility;
+    // Integration function end: Auth
+    // Integration function start: Telemetry
+    @Autowired
+    TelemetryUtility telemetryUtility;
+    // Integration function end: Telemetry
 
     public FileService(MetadataRepository metadataRepository, CollectionRepository collectionRepository) throws IOException {
         this.metadataRepository = metadataRepository;
@@ -112,6 +120,14 @@ public class FileService {
 
             if (file.delete()) {
                 metadataRepository.delete(metadata);
+                // Integration function start: Telemetry
+                telemetryUtility.sendTelemetryEvent("file-delete",
+                        true, // Integration line: Auth
+                        Map.of(
+                                "file-id", metadata.getId()
+                        )
+                ); // Integration function end: Telemetry
+
                 LOGGER.info("File successfully deleted");
                 return ResponseEntity.ok("File successfully deleted");
             }
@@ -141,6 +157,13 @@ public class FileService {
             Path filePath = uploadDir.resolve(metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getFileUUID());
 
             CipherInputStream decryptedStream = new CipherInputStream(Files.newInputStream(filePath), getCipher(Cipher.DECRYPT_MODE));
+            // Integration function start: Telemetry
+            telemetryUtility.sendTelemetryEvent("file-download",
+                    true, // Integration line: Auth
+                    Map.of(
+                            "file-id", metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getId()
+                    )
+            ); // Integration function end: Telemetry
 
             LOGGER.info("File successfully sent to user");
             return ResponseEntity.ok()
@@ -272,7 +295,18 @@ public class FileService {
             cipherOut.close();
             inputStream.close();
 
-            metadataRepository.save(new Metadata(collection, file.getOriginalFilename(), fileUUID + fileExtension, file.getContentType(), file.getSize()));
+            Metadata metadata = new Metadata(collection, file.getOriginalFilename(), fileUUID + fileExtension, file.getContentType(), file.getSize());
+
+            metadataRepository.save(metadata);
+            // Integration function start: Telemetry
+            telemetryUtility.sendTelemetryEvent("file-upload",
+                    true, // Integration line: Auth
+                    Map.of(
+                            "file-id", metadata.getId(),
+                            "file-size", metadata.getFileSize(),
+                            "uploaded-at", metadata.getCreatedAt()
+                    )
+            ); // Integration function end: Telemetry
 
             LOGGER.info("File successfully uploaded");
             return ResponseEntity.ok(new UploadResponse("File successfully uploaded"));
@@ -302,6 +336,15 @@ public class FileService {
             newCollection.addUser(new CollectionUser(newCollection, UUID.fromString(jwtUtility.extractId()), CollectionUserRole.OWNER));// Integration line: Auth
 
             collectionRepository.save(newCollection);
+            // Integration function start: Telemetry
+            telemetryUtility.sendTelemetryEvent("file-create-collection",
+                    true, // Integration line: Auth
+                    Map.of(
+                            "collection-id", newCollection.getId(),
+                            "collection-name", newCollection.getName(),
+                            "created-at", newCollection.getCreatedAt()
+                    )
+            ); // Integration function end: Telemetry
 
             LOGGER.info("New collection successfully created");
             return ResponseEntity.ok("New collection successfully created");
@@ -355,6 +398,15 @@ public class FileService {
 
             LOGGER.info("Metadata and files deleted, deleting collection");
             collectionRepository.delete(collection);
+            // Integration function start: Telemetry
+            telemetryUtility.sendTelemetryEvent("file-delete-collection",
+                    true, // Integration line: Auth
+                    Map.of(
+                            "collection-id", collection.getId(),
+                            "collection-name", collection.getName(),
+                            "deleted-at", LocalDateTime.now()
+                    )
+            ); // Integration function end: Telemetry
 
             LOGGER.info("Collection successfully deleted");
             return ResponseEntity.ok("Collection and children files successfully deleted");
