@@ -56,4 +56,20 @@ public class JwtUtility {
         LOGGER.info("Token successfully retrieved from header");
         return authHeader.substring(7); // Remove "Bearer "
     }
+    // Integration function start: Telemetry
+    public boolean isTokenValid(String token) {
+        try {
+            Key key = Keys.hmacShaKeyFor(Decoders.BASE64.decode(SECRET_KEY));
+
+            Jwts.parserBuilder()
+                    .setSigningKey(key)
+                    .build()
+                    .parseClaimsJws(token);
+
+            return true;
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+    // Integration function end: Telemetry
 }
