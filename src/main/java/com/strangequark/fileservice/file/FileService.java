@@ -723,7 +723,7 @@ public class FileService {
                     true, // Integration line: Auth
                     Map.of(
                             "deleted-user-id", userId,
-                            "deleted-from-collections", collections,
+                            "deleted-from-collections", collections.stream().map(Collection::getName).toList(),
                             "deleted-at", LocalDateTime.now()
                     )
             ); // Integration function end: Telemetry
