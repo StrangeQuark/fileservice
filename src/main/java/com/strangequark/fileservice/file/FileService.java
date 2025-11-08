@@ -34,7 +34,6 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.LocalDateTime;// Integration line: Telemetry
 import java.util.*;
 
 @Service
@@ -124,7 +123,10 @@ public class FileService {
                 telemetryUtility.sendTelemetryEvent("file-delete",
                         true, // Integration line: Auth
                         Map.of(
-                                "file-id", metadata.getId()
+                                "collection-id", collection.getId(),
+                                "collection-name", collection.getName(),
+                                "file-id", metadata.getId(),
+                                "file-name", metadata.getFileName()
                         )
                 ); // Integration function end: Telemetry
 
@@ -161,8 +163,10 @@ public class FileService {
             telemetryUtility.sendTelemetryEvent("file-download",
                     true, // Integration line: Auth
                     Map.of(
+                            "collection-id", collection.getId(),
+                            "collection-name", collection.getName(),
                             "file-id", metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getId(),
-                            "downloaded-at", LocalDateTime.now()
+                            "file-name", metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getFileName()
                     )
             ); // Integration function end: Telemetry
 
@@ -253,8 +257,10 @@ public class FileService {
             telemetryUtility.sendTelemetryEvent("file-stream",
                     true, // Integration line: Auth
                     Map.of(
+                            "collection-id", collection.getId(),
+                            "collection-name", collection.getName(),
                             "file-id", metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getId(),
-                            "streamed-at", LocalDateTime.now()
+                            "file-name", metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getFileName()
                     )
             ); // Integration function end: Telemetry
 
@@ -315,9 +321,11 @@ public class FileService {
             telemetryUtility.sendTelemetryEvent("file-upload",
                     true, // Integration line: Auth
                     Map.of(
+                            "collection-id", collection.getId(),
+                            "collection-name", collection.getName(),
                             "file-id", metadata.getId(),
-                            "file-size", metadata.getFileSize(),
-                            "uploaded-at", metadata.getCreatedAt()
+                            "file-name", metadata.getFileName(),
+                            "file-size", metadata.getFileSize()
                     )
             ); // Integration function end: Telemetry
 
@@ -354,8 +362,7 @@ public class FileService {
                     true, // Integration line: Auth
                     Map.of(
                             "collection-id", newCollection.getId(),
-                            "collection-name", newCollection.getName(),
-                            "created-at", newCollection.getCreatedAt()
+                            "collection-name", newCollection.getName()
                     )
             ); // Integration function end: Telemetry
 
@@ -416,8 +423,7 @@ public class FileService {
                     true, // Integration line: Auth
                     Map.of(
                             "collection-id", collection.getId(),
-                            "collection-name", collection.getName(),
-                            "deleted-at", LocalDateTime.now()
+                            "collection-name", collection.getName()
                     )
             ); // Integration function end: Telemetry
 
@@ -528,9 +534,9 @@ public class FileService {
             telemetryUtility.sendTelemetryEvent("file-update-user-role",
                     true, // Integration line: Auth
                     Map.of(
-                            "updated-user-id", targetUser.getId(),
-                            "new-role", collectionUserRequest.getRole(),
-                            "updated-at", LocalDateTime.now()
+                            "collection-id", collection.getId(),
+                            "collection-name", collection.getName(),
+                            "role", collectionUserRequest.getRole().name()
                     )
             ); // Integration function end: Telemetry
 
@@ -577,9 +583,8 @@ public class FileService {
             telemetryUtility.sendTelemetryEvent("file-add-user-to-collection",
                     true, // Integration line: Auth
                     Map.of(
-                            "added-user-id", userId,
                             "collection-id", collection.getId(),
-                            "updated-at", LocalDateTime.now()
+                            "collection-name", collection.getName()
                     )
             ); // Integration function end: Telemetry
 
@@ -635,8 +640,8 @@ public class FileService {
             telemetryUtility.sendTelemetryEvent("file-delete-user-from-collection",
                     true, // Integration line: Auth
                     Map.of(
-                            "deleted-user-id", targetUser.getId(),
-                            "deleted-at", LocalDateTime.now()
+                            "collection-id", collection.getId(),
+                            "collection-name", collection.getName()
                     )
             ); // Integration function end: Telemetry
 
@@ -722,9 +727,7 @@ public class FileService {
             telemetryUtility.sendTelemetryEvent("file-delete-user-from-all-collections",
                     true, // Integration line: Auth
                     Map.of(
-                            "deleted-user-id", userId,
-                            "deleted-from-collections", collections.stream().map(Collection::getName).toList(),
-                            "deleted-at", LocalDateTime.now()
+                            "collections-count", collections.size()
                     )
             ); // Integration function end: Telemetry
 
