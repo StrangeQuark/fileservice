@@ -1,14 +1,14 @@
 package com.strangequark.fileservice.collection;
 
 import com.fasterxml.jackson.annotation.JsonManagedReference;
-import com.strangequark.fileservice.collectionuser.CollectionUser;// Integration line: Auth
+import com.strangequark.fileservice.collectionuser.CollectionUser; // Integration line: Auth
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.utility.LocalDateTimeEncryptDecryptConverter;
 import com.strangequark.fileservice.utility.StringEncryptDecryptConverter;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
+import java.util.ArrayList; // Integration line: Auth
 import java.util.List;
 import java.util.UUID;
 
