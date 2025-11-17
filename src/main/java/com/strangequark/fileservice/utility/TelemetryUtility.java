@@ -26,9 +26,7 @@ public class TelemetryUtility {
     @Autowired
     private JwtUtility jwtUtility; // Integration function end: Auth
 
-    public void sendTelemetryEvent(String eventType,
-                                   boolean includeUserId, // Integration line: Auth
-                                   Map<String, Object> metadata) {
+    public void sendTelemetryEvent(String eventType, Map<String, Object> metadata) {
         try {
             LOGGER.info("Attempting to post message to file telemetry Kafka topic");
             // Integration function start: Auth
@@ -36,16 +34,11 @@ public class TelemetryUtility {
                 cachedServiceToken = authUtility.authenticateServiceAccount();
             }
             String accessToken = "Bearer " + cachedServiceToken;
-
-            UUID userId = null;
-
-            if(includeUserId)
-                userId = UUID.fromString(jwtUtility.extractId()); // Integration function end: Auth
+            // Integration function end: Auth
 
             JSONObject requestBody = new JSONObject();
             requestBody.put("serviceName", "fileservice");
             requestBody.put("eventType", eventType);
-            requestBody.put("userId", userId); // Integration line: Auth
             requestBody.put("timestamp", LocalDateTime.now());
             requestBody.put("metadata", new JSONObject(new HashMap<>(metadata)));
 
