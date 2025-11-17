@@ -120,9 +120,8 @@ public class FileService {
             if (file.delete()) {
                 metadataRepository.delete(metadata);
                 // Integration function start: Telemetry
-                telemetryUtility.sendTelemetryEvent("file-delete",
-                        true, // Integration line: Auth
-                        Map.of(
+                telemetryUtility.sendTelemetryEvent("file-delete", Map.of(
+                                "userId", jwtUtility.extractId(), // Integration line: Auth
                                 "collection-id", collection.getId(),
                                 "collection-name", collection.getName(),
                                 "file-id", metadata.getId(),
@@ -160,9 +159,8 @@ public class FileService {
 
             CipherInputStream decryptedStream = new CipherInputStream(Files.newInputStream(filePath), getCipher(Cipher.DECRYPT_MODE));
             // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-download",
-                    true, // Integration line: Auth
-                    Map.of(
+            telemetryUtility.sendTelemetryEvent("file-download", Map.of(
+                            "userId", jwtUtility.extractId(), // Integration line: Auth
                             "collection-id", collection.getId(),
                             "collection-name", collection.getName(),
                             "file-id", metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getId(),
@@ -254,9 +252,8 @@ public class FileService {
                         .body(decryptedBytes);
             }
             // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-stream",
-                    true, // Integration line: Auth
-                    Map.of(
+            telemetryUtility.sendTelemetryEvent("file-stream", Map.of(
+                            "userId", jwtUtility.extractId(), // Integration line: Auth
                             "collection-id", collection.getId(),
                             "collection-name", collection.getName(),
                             "file-id", metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getId(),
@@ -318,9 +315,8 @@ public class FileService {
 
             metadataRepository.save(metadata);
             // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-upload",
-                    true, // Integration line: Auth
-                    Map.of(
+            telemetryUtility.sendTelemetryEvent("file-upload", Map.of(
+                            "userId", jwtUtility.extractId(), // Integration line: Auth
                             "collection-id", collection.getId(),
                             "collection-name", collection.getName(),
                             "file-id", metadata.getId(),
@@ -358,9 +354,8 @@ public class FileService {
 
             collectionRepository.save(newCollection);
             // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-create-collection",
-                    true, // Integration line: Auth
-                    Map.of(
+            telemetryUtility.sendTelemetryEvent("file-create-collection", Map.of(
+                            "userId", jwtUtility.extractId(), // Integration line: Auth
                             "collection-id", newCollection.getId(),
                             "collection-name", newCollection.getName()
                     )
@@ -419,9 +414,8 @@ public class FileService {
             LOGGER.info("Metadata and files deleted, deleting collection");
             collectionRepository.delete(collection);
             // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-delete-collection",
-                    true, // Integration line: Auth
-                    Map.of(
+            telemetryUtility.sendTelemetryEvent("file-delete-collection", Map.of(
+                            "userId", jwtUtility.extractId(), // Integration line: Auth
                             "collection-id", collection.getId(),
                             "collection-name", collection.getName()
                     )
@@ -531,9 +525,8 @@ public class FileService {
             targetUser.setRole(collectionUserRequest.getRole());
             collectionUserRepository.save(targetUser);
             // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-update-user-role",
-                    true, // Integration line: Auth
-                    Map.of(
+            telemetryUtility.sendTelemetryEvent("file-update-user-role", Map.of(
+                            "userId", jwtUtility.extractId(), // Integration line: Auth
                             "collection-id", collection.getId(),
                             "collection-name", collection.getName(),
                             "role", collectionUserRequest.getRole().name()
@@ -580,9 +573,8 @@ public class FileService {
             collection.addUser(new CollectionUser(collection, userId, collectionUserRequest.getRole()));
             collectionRepository.save(collection);
             // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-add-user-to-collection",
-                    true, // Integration line: Auth
-                    Map.of(
+            telemetryUtility.sendTelemetryEvent("file-add-user-to-collection", Map.of(
+                            "userId", jwtUtility.extractId(), // Integration line: Auth
                             "collection-id", collection.getId(),
                             "collection-name", collection.getName()
                     )
@@ -637,9 +629,8 @@ public class FileService {
 
             collectionUserRepository.deleteCollectionUser(userId, collection.getId());
             // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-delete-user-from-collection",
-                    true, // Integration line: Auth
-                    Map.of(
+            telemetryUtility.sendTelemetryEvent("file-delete-user-from-collection", Map.of(
+                            "userId", jwtUtility.extractId(), // Integration line: Auth
                             "collection-id", collection.getId(),
                             "collection-name", collection.getName()
                     )
@@ -724,9 +715,8 @@ public class FileService {
                 collectionUserRepository.deleteCollectionUser(userId, collection.getId());
             }
             // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-delete-user-from-all-collections",
-                    true, // Integration line: Auth
-                    Map.of(
+            telemetryUtility.sendTelemetryEvent("file-delete-user-from-all-collections", Map.of(
+                            "userId", jwtUtility.extractId(), // Integration line: Auth
                             "collections-count", collections.size()
                     )
             ); // Integration function end: Telemetry
