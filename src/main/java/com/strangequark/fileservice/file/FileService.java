@@ -70,7 +70,7 @@ public class FileService {
 
     @Transactional(readOnly = true)
     public ResponseEntity<?> getAllFiles(String collectionName) {
-        LOGGER.info("Attempting to get all files");
+        LOGGER.debug("Attempting to get all files");
 
         try {
             Collection collection = collectionRepository.findByName(collectionName)
@@ -87,10 +87,11 @@ public class FileService {
                 files.add(m.getFileName());
             }
 
-            LOGGER.info("All files successfully retrieved");
+            LOGGER.debug("All files successfully retrieved");
             return ResponseEntity.ok(files);
         } catch (RuntimeException ex) {
-            LOGGER.error(ex.getMessage());
+            LOGGER.error("Failed to get all files: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(401).body(new ErrorResponse(ex.getMessage()));
         }
     }
@@ -136,11 +137,12 @@ public class FileService {
             LOGGER.error("File failed to delete");
             return ResponseEntity.status(400).body("File failed to delete");
         } catch (NoSuchElementException ex) {
-            LOGGER.error("File does not exist");
-            LOGGER.error(ex.getMessage());
+            LOGGER.error("File does not exist: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(404).body("File does not exist");
         } catch (RuntimeException ex) {
-            LOGGER.error(ex.getMessage());
+            LOGGER.error("Failed to delete file: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(401).body(new ErrorResponse(ex.getMessage()));
         }
     }
@@ -174,16 +176,13 @@ public class FileService {
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
                     .body(new InputStreamResource(decryptedStream));
         } catch (NoSuchElementException ex) {
-            LOGGER.error("File not found");
-            LOGGER.error(ex.getMessage());
+            LOGGER.error("File not found: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(404).body(new ErrorResponse("File not found"));
-        } catch (RuntimeException ex) {
-            LOGGER.error(ex.getMessage());
-            return ResponseEntity.status(500).body(new ErrorResponse(ex.getMessage()));
         }
         catch (Exception ex) {
-            LOGGER.error("File download failed");
-            LOGGER.error(ex.getMessage());
+            LOGGER.error("Failed to download file: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(500).body(new ErrorResponse("File download failed"));
         }
     }
@@ -262,13 +261,10 @@ public class FileService {
             ); // Integration function end: Telemetry
 
             return response;
-        } catch (IOException ex) {
-            LOGGER.error("File streaming failed");
-            LOGGER.error(ex.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ErrorResponse("File streaming failed"));
         } catch (Exception ex) {
-            LOGGER.error(ex.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ErrorResponse(ex.getMessage()));
+            LOGGER.error("Failed to stream file: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ErrorResponse("File streaming failed"));
         }
     }
 
@@ -327,17 +323,10 @@ public class FileService {
 
             LOGGER.info("File successfully uploaded");
             return ResponseEntity.ok(new UploadResponse("File successfully uploaded"));
-        } catch (IOException ex) {
-            LOGGER.error("File upload failed");
-            LOGGER.error(ex.getMessage());
-            return ResponseEntity.status(500).body(new ErrorResponse("File upload failed"));
-        } catch (NullPointerException ex) {
-            LOGGER.error("NPE - Invalid file extension");
-            LOGGER.error(ex.getMessage());
-            return ResponseEntity.status(500).body(new ErrorResponse("File upload failed, invalid file extension"));
         } catch (Exception ex) {
-            LOGGER.error(ex.getMessage());
-            return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
+            LOGGER.error("Failed to upload file: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
+            return ResponseEntity.status(500).body(new ErrorResponse("File upload failed"));
         }
     }
 
@@ -364,14 +353,15 @@ public class FileService {
             LOGGER.info("New collection successfully created");
             return ResponseEntity.ok("New collection successfully created");
         } catch(RuntimeException ex) {
-            LOGGER.error(ex.getMessage());
+            LOGGER.error("Failed to create new collection: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
     }
 
     @Transactional(readOnly = true)
     public ResponseEntity<?> getAllCollections() {
-        LOGGER.info("Attempting to retrieve all collections");
+        LOGGER.debug("Attempting to retrieve all collections");
 
         try {
             List<Collection> collectionList;
@@ -380,7 +370,8 @@ public class FileService {
 
             return ResponseEntity.ok(collectionList);
         } catch(Exception ex) {
-            LOGGER.error(ex.getMessage());
+            LOGGER.error("Failed to get all collections: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
     }
@@ -402,16 +393,16 @@ public class FileService {
                 throw new RuntimeException("Only collection OWNERs can delete collections.");
             }
             // Integration function end: Auth
-            LOGGER.info("Deleting all files and metadata in collection metadata list");
+            LOGGER.debug("Deleting all files and metadata in collection metadata list");
             for(Metadata metadata : collection.getMetadataList()) {
-                LOGGER.info("Deleting file " + metadata.getFileUUID());
+                LOGGER.debug("Deleting file " + metadata.getFileUUID());
                 deleteFile(collectionName, metadata.getFileName());
 
-                LOGGER.info("Deleting metadata " + metadata.getId());
+                LOGGER.debug("Deleting metadata " + metadata.getId());
                 metadataRepository.delete(metadata);
             }
 
-            LOGGER.info("Metadata and files deleted, deleting collection");
+            LOGGER.debug("Metadata and files deleted, deleting collection");
             collectionRepository.delete(collection);
             // Integration function start: Telemetry
             telemetryUtility.sendTelemetryEvent("file-delete-collection", Map.of(
@@ -424,14 +415,15 @@ public class FileService {
             LOGGER.info("Collection successfully deleted");
             return ResponseEntity.ok("Collection and children files successfully deleted");
         } catch (RuntimeException ex) {
-            LOGGER.error(ex.getMessage());
+            LOGGER.error("Failed to delete collection: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
     }
     // Integration function start: Auth
     @Transactional(readOnly = true)
     public ResponseEntity<?> getCurrentUserRole(String collectionName) {
-        LOGGER.info("Attempting to retrieve current user's role");
+        LOGGER.debug("Attempting to retrieve current user's role");
 
         try {
             Collection collection = collectionRepository.findByName(collectionName)
@@ -442,14 +434,15 @@ public class FileService {
 
             return ResponseEntity.ok(requestingUser.getRole());
         } catch(RuntimeException ex) {
-            LOGGER.error(ex.getMessage());
+            LOGGER.error("Failed to get current user role: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
     }
 
     @Transactional(readOnly = true)
     public ResponseEntity<?> getUsersByCollection(String collectionName) {
-        LOGGER.info("Attempting to retrieve users by collection");
+        LOGGER.debug("Attempting to retrieve users by collection");
 
         try {
             Collection collection = collectionRepository.findByName(collectionName)
@@ -460,16 +453,17 @@ public class FileService {
 
             List<CollectionUser> users = collectionUserRepository.findAllByCollectionId(collection.getId());
 
-            LOGGER.info("User list retrieval successful");
+            LOGGER.debug("User list retrieval successful");
             return ResponseEntity.ok(users);
         } catch(RuntimeException ex) {
-            LOGGER.error(ex.getMessage());
+            LOGGER.error("Failed to get users by collection: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
     }
 
     public ResponseEntity<?> getAllRoles() {
-        LOGGER.info("Attempting to retrieve all Collection User roles");
+        LOGGER.debug("Attempting to retrieve all Collection User roles");
 
         return ResponseEntity.ok(CollectionUserRole.values());
     }
@@ -536,7 +530,8 @@ public class FileService {
             LOGGER.info("User role successfully updated");
             return ResponseEntity.ok("User role successfully updated");
         } catch (Exception ex) {
-            LOGGER.error(ex.getMessage());
+            LOGGER.error("Failed to update user role: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
     }
@@ -583,7 +578,8 @@ public class FileService {
             LOGGER.info("User successfully added to collection");
             return ResponseEntity.ok("User successfully added to collection");
         } catch(RuntimeException ex) {
-            LOGGER.error(ex.getMessage());
+            LOGGER.error("Failed to add user to collection: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
     }
@@ -639,7 +635,8 @@ public class FileService {
             LOGGER.info("User successfully deleted from collection");
             return ResponseEntity.ok("User successfully deleted from collection");
         } catch(RuntimeException ex) {
-            LOGGER.error(ex.getMessage());
+            LOGGER.error("Failed to delete user from collection: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
     }
@@ -724,7 +721,8 @@ public class FileService {
             LOGGER.info("User successfully deleted from all collections");
             return ResponseEntity.ok("User successfully deleted from all collections");
         } catch(RuntimeException ex) {
-            LOGGER.error(ex.getMessage());
+            LOGGER.error("Failed to delete user from all collections: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
     }// Integration function end: Auth
