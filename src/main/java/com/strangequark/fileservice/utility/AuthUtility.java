@@ -22,7 +22,7 @@ public class AuthUtility {
 
     public String authenticateServiceAccount() {
         try {
-            LOGGER.info("Attempting to authenticate service account");
+            LOGGER.debug("Attempting to authenticate service account");
 
             Map<String, String> requestBody = new HashMap<>();
             requestBody.put("clientId", "file");
@@ -45,17 +45,18 @@ public class AuthUtility {
             if(!response.contains("jwtToken"))
                 throw new RuntimeException("jwtToken not found in authentication response");
 
-            LOGGER.info("Service account authentication success");
+            LOGGER.debug("Service account authentication success");
             return response.substring(response.indexOf("jwtToken:") + 9).trim();
         } catch (RestClientException ex) {
-            LOGGER.error(ex.getMessage());
+            LOGGER.error("Failed to authenticate service account in auth utility: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
             return null;
         }
     }
 
     public String getUserId(String username) {
         try {
-            LOGGER.info("Attempting to get user id");
+            LOGGER.debug("Attempting to get user id");
 
             String accessToken = authenticateServiceAccount();
 
@@ -78,10 +79,11 @@ public class AuthUtility {
                 return null;
             }
 
-            LOGGER.info("User id retrieval success");
+            LOGGER.debug("User id retrieval success");
             return response.replace("\"", "").trim();
         } catch (RestClientException ex) {
-            LOGGER.error(ex.getMessage());
+            LOGGER.error("Failed to get user id in auth utility: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
             return null;
         }
     }
