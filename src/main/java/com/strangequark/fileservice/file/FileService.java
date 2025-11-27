@@ -276,6 +276,9 @@ public class FileService {
             Collection collection = collectionRepository.findByName(collectionName)
                     .orElseThrow(() -> new RuntimeException("Collection not found"));
 
+            if(metadataRepository.findByCollectionIdAndFileName(collection.getId(), file.getOriginalFilename()).isPresent())
+                throw new RuntimeException("File name already exists in collection");
+
             // Integration function start: Auth
             CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
                     .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));
