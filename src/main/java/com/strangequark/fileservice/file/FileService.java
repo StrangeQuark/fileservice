@@ -174,6 +174,7 @@ public class FileService {
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .contentLength(metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getFileSize())
                     .body(new InputStreamResource(decryptedStream));
         } catch (NoSuchElementException ex) {
             LOGGER.error("File not found: " + ex.getMessage());
