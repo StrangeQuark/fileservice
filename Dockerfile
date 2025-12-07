@@ -14,6 +14,8 @@ RUN ./mvnw clean package
 # Stage 2: Create minimal runtime image
 FROM eclipse-temurin:21-alpine
 
+RUN apk add --no-cache curl
+
 WORKDIR /fileservice
 
 COPY --from=builder /fileservice/target/*.jar fileservice.jar
