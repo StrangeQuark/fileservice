@@ -29,7 +29,7 @@ services:
       - ACCESS_SECRET_KEY=${ACCESS_SECRET_KEY} # Integration line: Auth
       - SERVICE_SECRET_FILE=${SERVICE_SECRET_FILE}  # Integration line: Auth
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:3010/api/file/health" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:6010/api/file/health" ]
       interval: 10s
       timeout: 5s
       retries: 20
