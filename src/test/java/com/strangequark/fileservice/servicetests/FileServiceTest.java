@@ -53,7 +53,7 @@ public class FileServiceTest extends BaseServiceTest {
 
         ResponseEntity<?> response = fileService.streamFile(collectionName, fileName, "");
 
-        Assertions.assertEquals(200, response.getStatusCode().value());
+        Assertions.assertEquals(206, response.getStatusCode().value());
     }
 
     @Test

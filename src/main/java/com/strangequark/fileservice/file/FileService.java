@@ -18,10 +18,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import javax.crypto.Cipher;
 import javax.crypto.CipherInputStream;
@@ -189,7 +192,7 @@ public class FileService {
     }
 
     @Transactional(readOnly = true)
-    public ResponseEntity<?> streamFile(String collectionName, String fileName, String rangeHeader) {
+    public ResponseEntity<StreamingResponseBody> streamFile(String collectionName, String fileName, String rangeHeader) {
         LOGGER.info("Attempting to stream file");
 
         try {
@@ -199,73 +202,71 @@ public class FileService {
             collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
                     .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));// Integration function end: Auth
 
-            Optional<String> fileUUID = metadataRepository
-                    .findByCollectionIdAndFileName(collection.getId(), fileName)
-                    .map(metadata -> metadata.getFileUUID());
+            Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName)
+                    .orElseThrow(() -> new RuntimeException("File not found"));
 
-            if (fileUUID.isEmpty()) {
-                LOGGER.error("File not found when attempting to stream");
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse("File not found"));
-            }
-
-            Path filePath = uploadDir.resolve(fileUUID.get());
-
-            MediaType mediaType = MediaTypeFactory.getMediaType(filePath.toString())
-                    .orElse(MediaType.APPLICATION_OCTET_STREAM);
-
-            byte[] decryptedBytes;
-            try (CipherInputStream cipherIn = new CipherInputStream(Files.newInputStream(filePath), getCipher(Cipher.DECRYPT_MODE))) {
-                decryptedBytes = cipherIn.readAllBytes();
-            }
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(mediaType);
-            headers.set("Accept-Ranges", "bytes");
-            headers.setContentDisposition(ContentDisposition.inline().filename(fileName).build());
-            headers.setContentLength(decryptedBytes.length);
-
-            ResponseEntity<?> response;
+            Path filePath = uploadDir.resolve(metadata.getFileUUID());
+            long start = 0;
+            long end = metadata.getFileSize() - 1;
 
             if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
                 String[] ranges = rangeHeader.replace("bytes=", "").split("-");
-                long start = Long.parseLong(ranges[0]);
-                long end = (ranges.length > 1 && !ranges[1].isEmpty()) ? Long.parseLong(ranges[1]) : decryptedBytes.length - 1;
-
-                if (start > end || end >= decryptedBytes.length) {
-                    LOGGER.error("Invalid range when streaming file");
-                    return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-                            .body(new ErrorResponse("Invalid range"));
+                start = Long.parseLong(ranges[0]);
+                if (ranges.length > 1 && !ranges[1].isEmpty()) {
+                    end = Long.parseLong(ranges[1]);
                 }
-
-                byte[] partial = Arrays.copyOfRange(decryptedBytes, (int) start, (int) end + 1);
-                headers.set("Content-Range", "bytes " + start + "-" + end + "/" + decryptedBytes.length);
-                headers.set("Accept-Ranges", "bytes");
-
-                LOGGER.info("Stream file successfully sent with partial content");
-                response =  ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
-                        .headers(headers)
-                        .body(partial);
-            } else {
-                LOGGER.info("Stream file successfully sent");
-                response = ResponseEntity.ok()
-                        .headers(headers)
-                        .body(decryptedBytes);
             }
+
+            long contentLength = end - start + 1;
+            final long finalStart = start;
+
+            StreamingResponseBody responseBody = outputStream -> {
+                try (InputStream fis = Files.newInputStream(filePath);
+                     CipherInputStream cipherIn = new CipherInputStream(fis, getCipher(Cipher.DECRYPT_MODE))) {
+
+                    // Manual skip is safer for CipherInputStream
+                    long skipped = 0;
+                    while (skipped < finalStart) {
+                        long s = cipherIn.skip(finalStart - skipped);
+                        if (s <= 0) break;
+                        skipped += s;
+                    }
+
+                    byte[] buffer = new byte[8192];
+                    long remaining = contentLength;
+                    while (remaining > 0) {
+                        int read = cipherIn.read(buffer, 0, (int) Math.min(buffer.length, remaining));
+                        if (read == -1) break;
+                        outputStream.write(buffer, 0, read);
+                        remaining -= read;
+                    }
+                    outputStream.flush();
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            };
             // Integration function start: Telemetry
             telemetryUtility.sendTelemetryEvent("file-stream", Map.of(
                             "userId", jwtUtility.extractId(), // Integration line: Auth
                             "collection-id", collection.getId(),
                             "collection-name", collection.getName(),
-                            "file-id", metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getId(),
-                            "file-name", metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getFileName()
+                            "file-id", metadata.getId(),
+                            "file-name", metadata.getFileName()
                     )
             ); // Integration function end: Telemetry
 
-            return response;
+            LOGGER.info("Stream file successfully sent");
+            return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                    .contentType(MediaTypeFactory.getMediaType(filePath.toString()).orElse(MediaType.valueOf("video/mp4")))
+                    .header(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + metadata.getFileSize())
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .contentLength(contentLength)
+                    .body(responseBody);
+
         } catch (Exception ex) {
             LOGGER.error("Failed to stream file: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ErrorResponse("File streaming failed"));
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 

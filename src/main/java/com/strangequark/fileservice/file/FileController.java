@@ -1,9 +1,11 @@
 package com.strangequark.fileservice.file;
 
 import com.strangequark.fileservice.collectionuser.CollectionUserRequest;// Integration line: Auth
+import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @RestController
 @RequestMapping("/api/file")
@@ -25,7 +27,7 @@ public class FileController {
     }
 
     @GetMapping("/stream/{collectionName}/{fileName}")
-    public ResponseEntity<?> streamFile(@PathVariable String collectionName, @PathVariable String fileName, @RequestHeader(value = "Range", required = false) String rangeHeader) {
+    public ResponseEntity<StreamingResponseBody> streamFile(@PathVariable String collectionName, @PathVariable String fileName, @RequestHeader(value = "Range", required = false) String rangeHeader) {
         return fileService.streamFile(collectionName, fileName, rangeHeader);
     }
 
