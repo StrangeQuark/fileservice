@@ -18,8 +18,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.InputStreamResource;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +36,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @Service
 public class FileService {
@@ -188,6 +188,71 @@ public class FileService {
             LOGGER.error("Failed to download file: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(500).body(new ErrorResponse("File download failed"));
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public ResponseEntity<StreamingResponseBody> downloadAllFiles(String collectionName) {
+        LOGGER.info("Attempting to download all files");
+        try {
+            Collection collection = collectionRepository.findByName(collectionName)
+                    .orElseThrow(() -> new RuntimeException("Collection not found"));
+            // Integration function start: Auth
+            collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
+                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));// Integration function end: Auth
+
+            List<Metadata> metadata = collection.getMetadataList();
+
+            if(metadata.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            }
+
+            StreamingResponseBody stream = outputStream -> {
+                try {
+                    ZipOutputStream zip = new ZipOutputStream(outputStream);
+                    for (Metadata metadataItem : metadata) {
+                        Path filePath = uploadDir.resolve(metadataItem.getFileUUID());
+
+                        ZipEntry entry = new ZipEntry(metadataItem.getFileName());
+                        entry.setSize(metadataItem.getFileSize());
+                        zip.putNextEntry(entry);
+
+                        CipherInputStream decryptedStream = new CipherInputStream(Files.newInputStream(filePath), getCipher(Cipher.DECRYPT_MODE));
+
+                        byte[] buffer = new byte[8192];
+                        int length;
+
+                        while((length = decryptedStream.read(buffer)) > 0) {
+                            zip.write(buffer, 0, length);
+                        }
+
+                        zip.closeEntry();
+                    }
+
+                    zip.finish();
+                } catch (Exception ex) {
+                    LOGGER.error("Error when adding file to zip: " + ex.getMessage());
+                    LOGGER.debug("Stack trace: ", ex);
+                }
+            };
+            // Integration function start: Telemetry
+            telemetryUtility.sendTelemetryEvent("file-download", Map.of(
+                            "userId", jwtUtility.extractId(), // Integration line: Auth
+                            "collection-id", collection.getId(),
+                            "collection-name", collection.getName(),
+                            "file-count", metadata.size()
+                    )
+            ); // Integration function end: Telemetry
+
+            LOGGER.info("All files successfully sent to user");
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + collectionName + ".zip\"")
+                    .contentType(MediaType.parseMediaType("application/zip"))
+                    .body(stream);
+        } catch (Exception ex) {
+            LOGGER.error("Failed to download all files: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 

@@ -26,6 +26,11 @@ public class FileController {
         return fileService.downloadFile(collectionName, fileName);
     }
 
+    @GetMapping("/downloadAll/{collectionName}")
+    public ResponseEntity<StreamingResponseBody> downloadAllFiles(@PathVariable String collectionName) {
+        return fileService.downloadAllFiles(collectionName);
+    }
+
     @GetMapping("/stream/{collectionName}/{fileName}")
     public ResponseEntity<StreamingResponseBody> streamFile(@PathVariable String collectionName, @PathVariable String fileName, @RequestHeader(value = "Range", required = false) String rangeHeader) {
         return fileService.streamFile(collectionName, fileName, rangeHeader);
