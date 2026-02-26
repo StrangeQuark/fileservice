@@ -75,7 +75,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:6010/api/file/download/testCollection/england2025.txt",
+					"raw": "http://localhost:6010/api/file/download/testCollection/test.txt",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -86,7 +86,39 @@
 						"file",
 						"download",
 						"testCollection",
-						"england2025.txt"
+						"test.txt"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Download all files",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{ACCESS_TOKEN}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:6010/api/file/downloadAll/testCollection",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "6010",
+					"path": [
+						"api",
+						"file",
+						"downloadAll",
+						"testCollection"
 					]
 				}
 			},

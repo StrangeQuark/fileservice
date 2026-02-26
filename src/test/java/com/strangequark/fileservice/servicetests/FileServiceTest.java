@@ -40,9 +40,18 @@ public class FileServiceTest extends BaseServiceTest {
 
     @Test
     void downloadFileTest() {
-        LOGGER.info("Begin deleteFileTest");
+        LOGGER.info("Begin downloadFileTest");
 
         ResponseEntity<?> response = fileService.downloadFile(collectionName, fileName);
+
+        Assertions.assertEquals(200, response.getStatusCode().value());
+    }
+
+    @Test
+    void downloadAllFilesTest() {
+        LOGGER.info("Begin downloadAllFilesTest");
+
+        ResponseEntity<?> response = fileService.downloadAllFiles(collectionName);
 
         Assertions.assertEquals(200, response.getStatusCode().value());
     }
