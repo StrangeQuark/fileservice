@@ -34,6 +34,7 @@ public class CollectionUser {
     private UUID userId;
 
     @Convert(converter = RoleEncryptDecryptConverter.class)
+    @Column(nullable = false)
     private CollectionUserRole role;
 
     public UUID getId() {
