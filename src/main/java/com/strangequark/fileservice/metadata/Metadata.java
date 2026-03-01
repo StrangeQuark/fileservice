@@ -35,17 +35,20 @@ public class Metadata {
     @JsonBackReference
     private Collection collection;
 
-    @Column(name = "file_name")
+    @Column(name = "file_name", nullable = false)
     @Convert(converter = StringEncryptDecryptConverter.class)
     private String fileName;
 
     @Convert(converter = StringEncryptDecryptConverter.class)
+    @Column(nullable = false)
     private String fileUUID;
 
     @Convert(converter = StringEncryptDecryptConverter.class)
+    @Column(nullable = false)
     private String fileType;
 
     @Convert(converter = LongEncryptDecryptConverter.class)
+    @Column(nullable = false)
     private Long fileSize;
 
     @Column(name = "created_at", nullable = false, updatable = false)

@@ -31,9 +31,11 @@ public class CollectionUser {
     @JsonBackReference
     private Collection collection;
 
+    @Column(nullable = false, unique = true)
     private UUID userId;
 
     @Convert(converter = RoleEncryptDecryptConverter.class)
+    @Column(nullable = false)
     private CollectionUserRole role;
 
     public UUID getId() {
