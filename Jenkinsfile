@@ -1,5 +1,10 @@
 pipeline {
-    agent { label 'Host PC' }
+    agent { label 'linux-agent' }
+
+    environment {
+        VAULT_URL = credentials('VAULT_URL') // Integration line: Vault
+        CICD_TOKEN = credentials('CICD_TOKEN') // Integration line: Vault
+    }
 
     stages {
         // Integration function start: Vault
@@ -7,8 +12,11 @@ pipeline {
             steps {
                 script {
                     def response = httpRequest(
-                        url: 'http://localhost:6020/api/vault/getVariablesByEnvironment/fileservice/e3',
+                        url: VAULT_URL + '/api/vault/cicd/fileservice/e3',
                         httpMode: 'GET',
+                        customHeaders: [
+                            [name: 'X-CICD-TOKEN', value: CICD_TOKEN, maskValue: true]
+                        ],
                         acceptType: 'APPLICATION_JSON'
                     )
 
@@ -19,8 +27,8 @@ pipeline {
                         envFileContent += "${entry.key}=${entry.value}\n"
                     }
 
-                    writeFile file: '.env', text: envFileContent
-                    echo "Environment variables written to .env"
+                    writeFile file: 'fileservice.env', text: envFileContent
+                    echo "Environment variables written to fileservice.env"
                 }
             }
         }
@@ -29,7 +37,7 @@ pipeline {
             steps {
                 script {
                     try {
-                        bat "docker-compose --env-file .env up --build -d"
+                        sh "docker compose --env-file fileservice.env up --build -d"
 
                         def maxRetries = 4 * 10
                         def retryInterval = 15
@@ -53,18 +61,26 @@ pipeline {
 
                         if (!success) {
                             echo "Health check ultimately failed. Tearing down containers."
-                            bat "docker-compose down"
+                            sh "docker compose down"
                             error("Deployment failed: service not healthy.")
                         }
 
                     } catch (ex) {
                         echo "Unexpected failure: ${ex.getMessage()}"
-                        bat "docker-compose down"
+                        sh "docker compose down"
                         error("Deployment crashed.")
                     }
                 }
             }
         }
     }
+    // Integration function start: Vault
+    post {
+        always {
+            sh "rm -f fileservice.env"
+            echo "Cleaned up fileservice.env"
+        }
+    }
+    // Integration function end: Vault
 }
 
