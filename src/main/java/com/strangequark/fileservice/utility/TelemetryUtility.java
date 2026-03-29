@@ -9,10 +9,16 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.Executor;
 
 @Service
 public class TelemetryUtility {
@@ -26,6 +32,7 @@ public class TelemetryUtility {
     @Autowired
     private JwtUtility jwtUtility; // Integration function end: Auth
 
+    @Async("telemetryExecutor")
     public void sendTelemetryEvent(String eventType, Map<String, Object> metadata) {
         try {
             LOGGER.debug("Attempting to post message to file telemetry Kafka topic");
@@ -68,5 +75,20 @@ public class TelemetryUtility {
             producer = new KafkaProducer<>(props);
         }
         return producer;
+    }
+
+    @Configuration
+    @EnableAsync
+    static class TelemetryAsyncConfig {
+        @Bean(name = "telemetryExecutor")
+        public Executor telemetryExecutor() {
+            ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+            executor.setCorePoolSize(1);
+            executor.setMaxPoolSize(1);
+            executor.setQueueCapacity(50);
+            executor.setThreadNamePrefix("Telemetry-");
+            executor.initialize();
+            return executor;
+        }
     }
 }
