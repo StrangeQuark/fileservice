@@ -36,6 +36,9 @@ services:
   file-db:
     image: 'postgres:13.1-alpine'
     container_name: file-db
+    restart: unless-stopped
+    volumes:
+      - file-db-volume:/var/lib/postgresql/data/fileservice
     networks:
       - filedb-network
     environment:
@@ -47,3 +50,5 @@ networks:
     external: true
   shared-network:
     external: true
+volumes:
+  file-db-volume:
