@@ -38,7 +38,7 @@ services:
     container_name: file-db
     restart: unless-stopped
     volumes:
-      - file-db-volume:/var/lib/postgresql/data/fileservice
+      - file-db-volume:/var/lib/postgresql/data
     networks:
       - filedb-network
     environment:
