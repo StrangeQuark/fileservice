@@ -6,6 +6,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,7 +41,7 @@ public class JwtUtility {
     }
 
     private String getTokenFromHeader() {
-        LOGGER.debug("Attempting to get token from header");
+        LOGGER.debug("Attempting to get token from request");
         ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
         if (attrs == null) {
             throw new IllegalStateException("No request context available");
@@ -49,12 +50,22 @@ public class JwtUtility {
         HttpServletRequest request = attrs.getRequest();
         String authHeader = request.getHeader("Authorization");
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            throw new RuntimeException("Missing or invalid Authorization header");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            LOGGER.debug("Token successfully retrieved from header");
+            return authHeader.substring(7); // Remove "Bearer "
         }
 
-        LOGGER.debug("Token successfully retrieved from header");
-        return authHeader.substring(7); // Remove "Bearer "
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (Cookie cookie : cookies) {
+                if ("access_token".equals(cookie.getName()) && cookie.getValue() != null && !cookie.getValue().isBlank()) {
+                    LOGGER.debug("Token successfully retrieved from cookie");
+                    return cookie.getValue();
+                }
+            }
+        }
+
+        throw new RuntimeException("Missing or invalid Authorization header and access_token cookie");
     }
     // Integration function start: Telemetry
     public boolean isTokenValid(String token) {
