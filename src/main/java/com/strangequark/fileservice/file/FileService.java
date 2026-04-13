@@ -19,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.*;
+import org.springframework.http.MediaTypeFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -28,13 +29,16 @@ import javax.crypto.Cipher;
 import javax.crypto.CipherInputStream;
 import javax.crypto.CipherOutputStream;
 import javax.crypto.SecretKey;
+import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.SecureRandom;
 import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -42,6 +46,8 @@ import java.util.zip.ZipOutputStream;
 @Service
 public class FileService {
     private static final Logger LOGGER = LoggerFactory.getLogger(FileService.class);
+    private static final int AES_BLOCK_SIZE = 16;
+    private static final long STREAM_CHUNK_SIZE = 1024 * 1024;
     private final Path uploadDir = Paths.get("uploads");
 
     private final MetadataRepository metadataRepository;
@@ -162,14 +168,15 @@ public class FileService {
 
             Path filePath = uploadDir.resolve(metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getFileUUID());
 
-            CipherInputStream decryptedStream = new CipherInputStream(Files.newInputStream(filePath), getCipher(Cipher.DECRYPT_MODE));
+            Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+            CipherInputStream decryptedStream = new CipherInputStream(Files.newInputStream(filePath), getCipher(Cipher.DECRYPT_MODE, metadata));
             // Integration function start: Telemetry
             telemetryUtility.sendTelemetryEvent("file-download", Map.of(
                             "userId", jwtUtility.extractId(), // Integration line: Auth
                             "collection-id", collection.getId(),
                             "collection-name", collection.getName(),
-                            "file-id", metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getId(),
-                            "file-name", metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getFileName()
+                            "file-id", metadata.getId(),
+                            "file-name", metadata.getFileName()
                     )
             ); // Integration function end: Telemetry
 
@@ -217,7 +224,7 @@ public class FileService {
                         entry.setSize(metadataItem.getFileSize());
                         zip.putNextEntry(entry);
 
-                        CipherInputStream decryptedStream = new CipherInputStream(Files.newInputStream(filePath), getCipher(Cipher.DECRYPT_MODE));
+                        CipherInputStream decryptedStream = new CipherInputStream(Files.newInputStream(filePath), getCipher(Cipher.DECRYPT_MODE, metadataItem));
 
                         byte[] buffer = new byte[8192];
                         int length;
@@ -257,7 +264,7 @@ public class FileService {
     }
 
     @Transactional(readOnly = true)
-    public ResponseEntity<StreamingResponseBody> streamFile(String collectionName, String fileName, String rangeHeader) {
+    public ResponseEntity<byte[]> streamFile(String collectionName, String fileName, String rangeHeader) {
         LOGGER.info("Attempting to stream file");
 
         try {
@@ -271,45 +278,9 @@ public class FileService {
                     .orElseThrow(() -> new RuntimeException("File not found"));
 
             Path filePath = uploadDir.resolve(metadata.getFileUUID());
-            long start = 0;
-            long end = metadata.getFileSize() - 1;
-
-            if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
-                String[] ranges = rangeHeader.replace("bytes=", "").split("-");
-                start = Long.parseLong(ranges[0]);
-                if (ranges.length > 1 && !ranges[1].isEmpty()) {
-                    end = Long.parseLong(ranges[1]);
-                }
-            }
-
-            long contentLength = end - start + 1;
-            final long finalStart = start;
-
-            StreamingResponseBody responseBody = outputStream -> {
-                try (InputStream fis = Files.newInputStream(filePath);
-                     CipherInputStream cipherIn = new CipherInputStream(fis, getCipher(Cipher.DECRYPT_MODE))) {
-
-                    // Manual skip is safer for CipherInputStream
-                    long skipped = 0;
-                    while (skipped < finalStart) {
-                        long s = cipherIn.skip(finalStart - skipped);
-                        if (s <= 0) break;
-                        skipped += s;
-                    }
-
-                    byte[] buffer = new byte[8192];
-                    long remaining = contentLength;
-                    while (remaining > 0) {
-                        int read = cipherIn.read(buffer, 0, (int) Math.min(buffer.length, remaining));
-                        if (read == -1) break;
-                        outputStream.write(buffer, 0, read);
-                        remaining -= read;
-                    }
-                    outputStream.flush();
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
-            };
+            long fileSize = metadata.getFileSize();
+            RegionRequest regionRequest = resolveRegionRequest(rangeHeader, fileSize);
+            byte[] decryptedChunk = decryptRegion(filePath, metadata, regionRequest.start(), regionRequest.count());
             // Integration function start: Telemetry
             telemetryUtility.sendTelemetryEvent("file-stream", Map.of(
                             "userId", jwtUtility.extractId(), // Integration line: Auth
@@ -321,17 +292,24 @@ public class FileService {
             ); // Integration function end: Telemetry
 
             LOGGER.info("Stream file successfully sent");
-            return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
-                    .contentType(MediaTypeFactory.getMediaType(filePath.toString()).orElse(MediaType.valueOf("video/mp4")))
-                    .header(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + metadata.getFileSize())
+            ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.status(regionRequest.isPartial() ? HttpStatus.PARTIAL_CONTENT : HttpStatus.OK)
+                    .contentType(resolveMediaType(metadata, filePath))
                     .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                    .contentLength(contentLength)
-                    .body(responseBody);
+                    .contentLength(decryptedChunk.length);
+
+            if (regionRequest.isPartial()) {
+                responseBuilder.header(
+                        HttpHeaders.CONTENT_RANGE,
+                        "bytes " + regionRequest.start() + "-" + regionRequest.end() + "/" + fileSize
+                );
+            }
+
+            return responseBuilder.body(decryptedChunk);
 
         } catch (Exception ex) {
             LOGGER.error("Failed to stream file: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new byte[0]);
         }
     }
 
@@ -367,7 +345,8 @@ public class FileService {
 
             Path filePath = uploadDir.resolve(fileUUID + fileExtension);
 
-            CipherOutputStream cipherOut = new CipherOutputStream(Files.newOutputStream(filePath), getCipher(Cipher.ENCRYPT_MODE));
+            byte[] iv = generateIv();
+            CipherOutputStream cipherOut = new CipherOutputStream(Files.newOutputStream(filePath), getCipher(Cipher.ENCRYPT_MODE, iv, 0));
             InputStream inputStream = file.getInputStream();
             byte[] buffer = new byte[4096];
             int bytesRead;
@@ -377,7 +356,14 @@ public class FileService {
             cipherOut.close();
             inputStream.close();
 
-            Metadata metadata = new Metadata(collection, file.getOriginalFilename(), fileUUID + fileExtension, file.getContentType(), file.getSize());
+            Metadata metadata = new Metadata(
+                    collection,
+                    file.getOriginalFilename(),
+                    fileUUID + fileExtension,
+                    file.getContentType(),
+                    file.getSize(),
+                    Base64.getEncoder().encodeToString(iv)
+            );
 
             metadataRepository.save(metadata);
             // Integration function start: Telemetry
@@ -797,14 +783,104 @@ public class FileService {
         }
     }// Integration function end: Auth
 
-    private Cipher getCipher(int mode) throws Exception {
+    private Cipher getCipher(int mode, Metadata metadata) throws Exception {
+        return getCipher(mode, Base64.getDecoder().decode(metadata.getIv()), 0);
+    }
+
+    private Cipher getCipher(int mode, byte[] iv, long offset) throws Exception {
         if (encryptionKey == null || encryptionKey.length() != 32) {
             throw new RuntimeException("Invalid ENCRYPTION_KEY (must be 32 characters for AES-256)");
         }
 
         SecretKey secretKey = new SecretKeySpec(encryptionKey.getBytes(), "AES");
-        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
-        cipher.init(mode, secretKey);
+        Cipher cipher = Cipher.getInstance("AES/CTR/NoPadding");
+        cipher.init(mode, secretKey, new IvParameterSpec(buildCounterIv(iv, offset / AES_BLOCK_SIZE)));
         return cipher;
     }
+
+    private byte[] generateIv() {
+        byte[] iv = new byte[AES_BLOCK_SIZE];
+        new SecureRandom().nextBytes(iv);
+        return iv;
+    }
+
+    private MediaType resolveMediaType(Metadata metadata, Path filePath) {
+        if (metadata.getFileType() != null && !metadata.getFileType().isBlank()) {
+            return MediaType.parseMediaType(metadata.getFileType());
+        }
+
+        return MediaTypeFactory.getMediaType(filePath.toString()).orElse(MediaType.valueOf("video/mp4"));
+    }
+
+    private RegionRequest resolveRegionRequest(String rangeHeader, long fileSize) {
+        long start = 0;
+        long end = Math.min(fileSize - 1, STREAM_CHUNK_SIZE - 1);
+
+        if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
+            String[] ranges = rangeHeader.substring(6).split("-", 2);
+
+            if (!ranges[0].isBlank()) {
+                start = Long.parseLong(ranges[0]);
+                end = Math.min(fileSize - 1, start + STREAM_CHUNK_SIZE - 1);
+            }
+
+            if (ranges.length > 1 && !ranges[1].isBlank()) {
+                end = Math.min(Long.parseLong(ranges[1]), Math.min(fileSize - 1, start + STREAM_CHUNK_SIZE - 1));
+            } else if (ranges[0].isBlank()) {
+                long suffixLength = Math.min(Long.parseLong(ranges[1]), fileSize);
+                start = fileSize - suffixLength;
+                end = fileSize - 1;
+            }
+        } else if (fileSize <= STREAM_CHUNK_SIZE) {
+            end = fileSize - 1;
+        }
+
+        if (start < 0 || end < start || start >= fileSize) {
+            throw new IllegalArgumentException("Invalid range requested");
+        }
+
+        return new RegionRequest(start, end, end - start + 1, start > 0 || end < fileSize - 1);
+    }
+
+    private byte[] decryptRegion(Path filePath, Metadata metadata, long start, long count) throws Exception {
+        long blockStart = (start / AES_BLOCK_SIZE) * AES_BLOCK_SIZE;
+        int offsetWithinBlock = (int) (start - blockStart);
+
+        try (RandomAccessFile randomAccessFile = new RandomAccessFile(filePath.toFile(), "r")) {
+            randomAccessFile.seek(blockStart);
+
+            int bytesToRead = (int) Math.min(Integer.MAX_VALUE, count + offsetWithinBlock);
+            byte[] encryptedBytes = new byte[bytesToRead];
+            int bytesRead = randomAccessFile.read(encryptedBytes);
+
+            if (bytesRead < 0) {
+                return new byte[0];
+            }
+
+            if (bytesRead < encryptedBytes.length) {
+                encryptedBytes = Arrays.copyOf(encryptedBytes, bytesRead);
+            }
+
+            byte[] decryptedBytes = getCipher(Cipher.DECRYPT_MODE, Base64.getDecoder().decode(metadata.getIv()), blockStart)
+                    .doFinal(encryptedBytes);
+
+            return Arrays.copyOfRange(decryptedBytes, offsetWithinBlock, Math.min(decryptedBytes.length, offsetWithinBlock + (int) count));
+        }
+    }
+
+    private byte[] buildCounterIv(byte[] baseIv, long blockOffset) {
+        byte[] counterIv = Arrays.copyOf(baseIv, baseIv.length);
+
+        for (int i = counterIv.length - 1; i >= 0 && blockOffset > 0; i--) {
+            long sum = (counterIv[i] & 0xFFL) + (blockOffset & 0xFFL);
+            counterIv[i] = (byte) sum;
+            blockOffset = (blockOffset >>> 8) + (sum >>> 8);
+        }
+
+        return counterIv;
+    }
+
+    private record RegionRequest(long start, long end, long count, boolean isPartial) {
+    }
+
 }

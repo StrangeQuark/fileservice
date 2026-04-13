@@ -18,12 +18,13 @@ public class Metadata {
 
     }
 
-    public Metadata(Collection collection, String fileName, String fileUUID, String fileType, Long fileSize) {
+    public Metadata(Collection collection, String fileName, String fileUUID, String fileType, Long fileSize, String iv) {
         this.collection = collection;
         this.fileName = fileName;
         this.fileUUID = fileUUID;
         this.fileType = fileType;
         this.fileSize = fileSize;
+        this.iv = iv;
     }
 
     @Id
@@ -50,6 +51,10 @@ public class Metadata {
     @Convert(converter = LongEncryptDecryptConverter.class)
     @Column(nullable = false)
     private Long fileSize;
+
+    @Convert(converter = StringEncryptDecryptConverter.class)
+    @Column(nullable = false)
+    private String iv;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Convert(converter = LocalDateTimeEncryptDecryptConverter.class)
@@ -108,6 +113,14 @@ public class Metadata {
 
     public void setFileSize(Long fileSize) {
         this.fileSize = fileSize;
+    }
+
+    public String getIv() {
+        return iv;
+    }
+
+    public void setIv(String iv) {
+        this.iv = iv;
     }
 
     public LocalDateTime getCreatedAt() {
