@@ -79,7 +79,7 @@ For more information, see: [Authservice GitHub Repository](https://github.com/St
 <br><br>
 
 ## License
-This project is licensed under the GNU General Public License. See `LICENSE.md` for details.
+This project is licensed under the Apache License 2.0. See `LICENSE` for details.
 <br><br>
 
 ## Contributing
