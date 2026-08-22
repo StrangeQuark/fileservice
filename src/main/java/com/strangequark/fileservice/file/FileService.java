@@ -13,6 +13,7 @@ import com.strangequark.fileservice.response.UploadResponse;
 import com.strangequark.fileservice.utility.AuthUtility;// Integration line: Auth
 import com.strangequark.fileservice.utility.JwtUtility;// Integration line: Auth
 import com.strangequark.fileservice.utility.TelemetryUtility;// Integration line: Telemetry
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,7 +38,6 @@ import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.SecureRandom;
 import java.util.*;
 import java.util.zip.ZipEntry;
@@ -48,7 +48,8 @@ public class FileService {
     private static final Logger LOGGER = LoggerFactory.getLogger(FileService.class);
     private static final int AES_BLOCK_SIZE = 16;
     private static final long STREAM_CHUNK_SIZE = 1024 * 1024;
-    private final Path uploadDir = Paths.get("uploads");
+    @Value("${file.storage.path}")
+    private Path uploadDir;
 
     private final MetadataRepository metadataRepository;
     private final CollectionRepository collectionRepository;
@@ -68,10 +69,13 @@ public class FileService {
     TelemetryUtility telemetryUtility;
     // Integration function end: Telemetry
 
-    public FileService(MetadataRepository metadataRepository, CollectionRepository collectionRepository) throws IOException {
+    public FileService(MetadataRepository metadataRepository, CollectionRepository collectionRepository) {
         this.metadataRepository = metadataRepository;
         this.collectionRepository = collectionRepository;
+    }
 
+    @PostConstruct
+    public void initializeFileStorage() throws IOException {
         if (!Files.exists(uploadDir)) {
             Files.createDirectories(uploadDir);
         }
