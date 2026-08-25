@@ -28,7 +28,7 @@ public class WebSecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/file/health").permitAll()
-                        .requestMatchers("/api/**").authenticated() // Integration line: Auth
+                        .requestMatchers("/api/**").hasAuthority("FILE_API_ACCESS") // Integration line: Auth
                         .anyRequest().permitAll()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

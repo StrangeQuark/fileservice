@@ -5,7 +5,6 @@ package com.strangequark.fileservice.utility;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
-import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -16,28 +15,27 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.security.Key;
+import java.security.KeyFactory;
+import java.security.spec.X509EncodedKeySpec;
 
 @Service
 public class JwtUtility {
     private static final Logger LOGGER = LoggerFactory.getLogger(JwtUtility.class);
 
-    @Value("${ACCESS_SECRET_KEY}")
-    private String SECRET_KEY;
+    @Value("${JWT_PUBLIC_KEY}")
+    private String JWT_PUBLIC_KEY;
+
+    @Value("${JWT_ISSUER}")
+    private String JWT_ISSUER;
 
     public String extractId() {
         LOGGER.debug("Attempting to extract subject from JWT");
 
         String token = getTokenFromHeader();
-        Key key = Keys.hmacShaKeyFor(Decoders.BASE64.decode(SECRET_KEY));
-
-        Claims claims = Jwts.parserBuilder()
-                .setSigningKey(key)
-                .build()
-                .parseClaimsJws(token)
-                .getBody();
+        Claims claims = getClaims(token);
 
         LOGGER.debug("Subject successfully extracted from JWT");
-        return claims.getId();
+        return claims.get("principalId", String.class);
     }
 
     private String getTokenFromHeader() {
@@ -70,17 +68,34 @@ public class JwtUtility {
     // Integration function start: Telemetry
     public boolean isTokenValid(String token) {
         try {
-            Key key = Keys.hmacShaKeyFor(Decoders.BASE64.decode(SECRET_KEY));
-
-            Jwts.parserBuilder()
-                    .setSigningKey(key)
-                    .build()
-                    .parseClaimsJws(token);
-
+            getClaims(token);
             return true;
         } catch (Exception ex) {
             return false;
         }
     }
     // Integration function end: Telemetry
+
+    private Claims getClaims(String token) {
+        try {
+            Key key = KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(Decoders.BASE64.decode(JWT_PUBLIC_KEY)));
+
+            Claims claims = Jwts.parserBuilder()
+                    .setSigningKey(key)
+                    .requireIssuer(JWT_ISSUER)
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+
+            if(!claims.get("tokenType", String.class).equals("ACCESS"))
+                throw new RuntimeException("JWT token type is invalid");
+
+            if(claims.getId() == null || claims.get("principalId", String.class) == null)
+                throw new RuntimeException("JWT is missing required claims");
+
+            return claims;
+        } catch(Exception ex) {
+            throw new RuntimeException("Failed to validate JWT", ex);
+        }
+    }
 }
