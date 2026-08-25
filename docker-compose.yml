@@ -29,7 +29,8 @@ services:
       - SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE=${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE}
       - FILE_STORAGE_PATH=${FILE_STORAGE_PATH}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-      - ACCESS_SECRET_KEY=${ACCESS_SECRET_KEY} # Integration line: Auth
+      - JWT_PUBLIC_KEY=${JWT_PUBLIC_KEY} # Integration line: Auth
+      - JWT_ISSUER=${JWT_ISSUER} # Integration line: Auth
       - SERVICE_SECRET_FILE=${SERVICE_SECRET_FILE}  # Integration line: Auth
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:6010/api/file/health" ]
