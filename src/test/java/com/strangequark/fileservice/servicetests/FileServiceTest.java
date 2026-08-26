@@ -10,10 +10,13 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Arrays;// Integration line: Auth
@@ -152,6 +155,50 @@ public class FileServiceTest extends BaseServiceTest {
 
         Assertions.assertTrue(file.delete());
         LOGGER.info("uploadFileTest cleanup successful");
+    }
+
+    @Test
+    void failedUploadDeletesTemporaryFileTest() throws Exception {
+        LOGGER.info("Begin failedUploadDeletesTemporaryFileTest");
+
+        long filesBefore;
+        try (var files = Files.list(uploadDir)) {
+            filesBefore = files.count();
+        }
+
+        MultipartFile failingFile = org.mockito.Mockito.mock(MultipartFile.class);
+        org.mockito.Mockito.when(failingFile.getOriginalFilename()).thenReturn("failedUpload.txt");
+        org.mockito.Mockito.when(failingFile.getContentType()).thenReturn("text/plain");
+        org.mockito.Mockito.when(failingFile.getSize()).thenReturn((long) (1024 * 1024) + 1);
+        org.mockito.Mockito.when(failingFile.getInputStream()).thenReturn(new InputStream() {
+            private boolean firstRead = true;
+
+            @Override
+            public int read() throws IOException {
+                throw new IOException("Failed to read upload");
+            }
+
+            @Override
+            public int read(byte[] bytes, int offset, int length) throws IOException {
+                if(firstRead) {
+                    firstRead = false;
+                    return length;
+                }
+
+                throw new IOException("Failed to read upload");
+            }
+        });
+
+        ResponseEntity<?> response = fileService.uploadFile(failingFile, collectionName);
+
+        Assertions.assertEquals(500, response.getStatusCode().value());
+        Assertions.assertTrue(metadataRepository
+                .findByCollectionIdAndFileName(collection.getId(), "failedUpload.txt")
+                .isEmpty());
+
+        try (var files = Files.list(uploadDir)) {
+            Assertions.assertEquals(filesBefore, files.count());
+        }
     }
 
     @Test

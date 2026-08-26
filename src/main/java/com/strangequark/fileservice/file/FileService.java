@@ -22,6 +22,7 @@ import org.springframework.http.*;
 import org.springframework.http.MediaTypeFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
@@ -38,6 +39,7 @@ import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.SecureRandom;
 import java.util.*;
 import java.util.zip.ZipEntry;
@@ -350,45 +352,54 @@ public class FileService {
 
             String storedFileName = fileUUID + fileExtension;
             Path filePath = uploadDir.resolve(storedFileName);
+            Path tempFilePath = uploadDir.resolve(storedFileName + ".tmp");
 
             byte[] iv = generateIv();
-            try (InputStream inputStream = file.getInputStream();
-                 OutputStream outputStream = Files.newOutputStream(filePath)) {
-                byte[] buffer = new byte[STREAM_CHUNK_SIZE];
-                int bytesRead;
-                long chunkIndex = 0;
+            try {
+                try (InputStream inputStream = file.getInputStream();
+                     OutputStream outputStream = Files.newOutputStream(tempFilePath)) {
+                    byte[] buffer = new byte[STREAM_CHUNK_SIZE];
+                    int bytesRead;
+                    long chunkIndex = 0;
 
-                while ((bytesRead = inputStream.readNBytes(buffer, 0, buffer.length)) > 0) {
-                    outputStream.write(encryptChunk(buffer, bytesRead, iv, storedFileName, file.getSize(), chunkIndex));
-                    chunkIndex++;
+                    while ((bytesRead = inputStream.readNBytes(buffer, 0, buffer.length)) > 0) {
+                        outputStream.write(encryptChunk(buffer, bytesRead, iv, storedFileName, file.getSize(), chunkIndex));
+                        chunkIndex++;
+                    }
                 }
+
+                Metadata metadata = new Metadata(
+                        collection,
+                        file.getOriginalFilename(),
+                        storedFileName,
+                        file.getContentType(),
+                        file.getSize(),
+                        Base64.getEncoder().encodeToString(iv),
+                        ENCRYPTION_VERSION
+                );
+
+                Files.move(tempFilePath, filePath, StandardCopyOption.ATOMIC_MOVE);
+                metadataRepository.saveAndFlush(metadata);
+                // Integration function start: Telemetry
+                telemetryUtility.sendTelemetryEvent("file-upload", Map.of(
+                                "userId", jwtUtility.extractId(), // Integration line: Auth
+                                "collection-id", collection.getId(),
+                                "collection-name", collection.getName(),
+                                "file-id", metadata.getId(),
+                                "file-name", metadata.getFileName(),
+                                "file-size", metadata.getFileSize()
+                        )
+                ); // Integration function end: Telemetry
+
+                LOGGER.info("File successfully uploaded");
+                return ResponseEntity.ok(new UploadResponse("File successfully uploaded"));
+            } catch(Exception ex) {
+                Files.deleteIfExists(tempFilePath);
+                Files.deleteIfExists(filePath);
+                throw ex;
             }
-
-            Metadata metadata = new Metadata(
-                    collection,
-                    file.getOriginalFilename(),
-                    storedFileName,
-                    file.getContentType(),
-                    file.getSize(),
-                    Base64.getEncoder().encodeToString(iv),
-                    ENCRYPTION_VERSION
-            );
-
-            metadataRepository.save(metadata);
-            // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-upload", Map.of(
-                            "userId", jwtUtility.extractId(), // Integration line: Auth
-                            "collection-id", collection.getId(),
-                            "collection-name", collection.getName(),
-                            "file-id", metadata.getId(),
-                            "file-name", metadata.getFileName(),
-                            "file-size", metadata.getFileSize()
-                    )
-            ); // Integration function end: Telemetry
-
-            LOGGER.info("File successfully uploaded");
-            return ResponseEntity.ok(new UploadResponse("File successfully uploaded"));
         } catch (Exception ex) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             LOGGER.error("Failed to upload file: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(500).body(new ErrorResponse("File upload failed"));
