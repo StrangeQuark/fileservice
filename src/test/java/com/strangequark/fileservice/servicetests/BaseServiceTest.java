@@ -5,6 +5,7 @@ import com.strangequark.fileservice.collection.CollectionRepository;
 import com.strangequark.fileservice.collectionuser.CollectionUser;// Integration line: Auth
 import com.strangequark.fileservice.collectionuser.CollectionUserRepository;// Integration line: Auth
 import com.strangequark.fileservice.collectionuser.CollectionUserRole;// Integration line: Auth
+import com.strangequark.fileservice.filedeletion.FileDeletionRepository;
 import com.strangequark.fileservice.file.FileService;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
@@ -43,6 +44,8 @@ public abstract class BaseServiceTest {
     public MetadataRepository metadataRepository;
     @Autowired
     public CollectionRepository collectionRepository;
+    @Autowired
+    public FileDeletionRepository fileDeletionRepository;
     @Autowired// Integration function start: Auth
     public CollectionUserRepository collectionUserRepository;
     @MockitoBean
@@ -97,6 +100,7 @@ public abstract class BaseServiceTest {
         }
 
         try {
+            fileDeletionRepository.deleteAll();
             collectionRepository.deleteAll();
             collectionUserRepository.deleteAll();// Integration line: Auth
             LOGGER.info("Collections successful teardown");

@@ -6,6 +6,8 @@ import com.strangequark.fileservice.collectionuser.CollectionUser;// Integration
 import com.strangequark.fileservice.collectionuser.CollectionUserRepository;// Integration line: Auth
 import com.strangequark.fileservice.collectionuser.CollectionUserRequest;// Integration line: Auth
 import com.strangequark.fileservice.collectionuser.CollectionUserRole;// Integration line: Auth
+import com.strangequark.fileservice.filedeletion.FileDeletion;
+import com.strangequark.fileservice.filedeletion.FileDeletionRepository;
 import com.strangequark.fileservice.response.ErrorResponse;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
@@ -17,12 +19,17 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.http.MediaTypeFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
@@ -31,7 +38,6 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -54,9 +60,13 @@ public class FileService {
     private static final String ENCRYPTION_VERSION = "AES_GCM_V1";
     @Value("${file.storage.path}")
     private Path uploadDir;
+    @Value("${file.reconciliation.min.age}")
+    private long reconciliationMinAge;
 
     private final MetadataRepository metadataRepository;
     private final CollectionRepository collectionRepository;
+    private final FileDeletionRepository fileDeletionRepository;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Value("${ENCRYPTION_KEY}")
     private String encryptionKey;
@@ -73,9 +83,12 @@ public class FileService {
     TelemetryUtility telemetryUtility;
     // Integration function end: Telemetry
 
-    public FileService(MetadataRepository metadataRepository, CollectionRepository collectionRepository) {
+    public FileService(MetadataRepository metadataRepository, CollectionRepository collectionRepository,
+                       FileDeletionRepository fileDeletionRepository, ApplicationEventPublisher applicationEventPublisher) {
         this.metadataRepository = metadataRepository;
         this.collectionRepository = collectionRepository;
+        this.fileDeletionRepository = fileDeletionRepository;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     @PostConstruct
@@ -132,27 +145,34 @@ public class FileService {
                 throw new RuntimeException("Only collection users with OWNER, MANAGER, or READWRITE roles can delete files");
             }
             // Integration function end: Auth
-            Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
-            File file = new File("uploads/" + metadata.getFileUUID());
+            Optional<Metadata> metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName);
 
-            if (file.delete()) {
-                metadataRepository.delete(metadata);
-                // Integration function start: Telemetry
-                telemetryUtility.sendTelemetryEvent("file-delete", Map.of(
-                                "userId", jwtUtility.extractId(), // Integration line: Auth
-                                "collection-id", collection.getId(),
-                                "collection-name", collection.getName(),
-                                "file-id", metadata.getId(),
-                                "file-name", metadata.getFileName()
-                        )
-                ); // Integration function end: Telemetry
+            if(metadata.isEmpty()) {
+                if(fileDeletionRepository.findByCollectionIdAndFileName(collection.getId(), fileName).isPresent())
+                    return ResponseEntity.ok("File deletion already pending");
 
-                LOGGER.info("File successfully deleted");
-                return ResponseEntity.ok("File successfully deleted");
+                throw new NoSuchElementException("File does not exist");
             }
 
-            LOGGER.error("File failed to delete");
-            return ResponseEntity.status(400).body("File failed to delete");
+            FileDeletion fileDeletion = fileDeletionRepository.save(new FileDeletion(
+                    collection.getId(),
+                    metadata.get().getFileName(),
+                    metadata.get().getFileUUID()
+            ));
+            metadataRepository.delete(metadata.get());
+            applicationEventPublisher.publishEvent(fileDeletion);
+            // Integration function start: Telemetry
+            telemetryUtility.sendTelemetryEvent("file-delete", Map.of(
+                            "userId", jwtUtility.extractId(), // Integration line: Auth
+                            "collection-id", collection.getId(),
+                            "collection-name", collection.getName(),
+                            "file-id", metadata.get().getId(),
+                            "file-name", metadata.get().getFileName()
+                    )
+            ); // Integration function end: Telemetry
+
+            LOGGER.info("File deletion successfully queued");
+            return ResponseEntity.ok("File deletion successfully queued");
         } catch (NoSuchElementException ex) {
             LOGGER.error("File does not exist: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
@@ -469,16 +489,17 @@ public class FileService {
                 throw new RuntimeException("Only collection OWNERs can delete collections.");
             }
             // Integration function end: Auth
-            LOGGER.debug("Deleting all files and metadata in collection metadata list");
+            LOGGER.debug("Queueing all files in collection for deletion");
             for(Metadata metadata : collection.getMetadataList()) {
-                LOGGER.debug("Deleting file " + metadata.getFileUUID());
-                deleteFile(collectionName, metadata.getFileName());
-
-                LOGGER.debug("Deleting metadata " + metadata.getId());
-                metadataRepository.delete(metadata);
+                FileDeletion fileDeletion = fileDeletionRepository.save(new FileDeletion(
+                        collection.getId(),
+                        metadata.getFileName(),
+                        metadata.getFileUUID()
+                ));
+                applicationEventPublisher.publishEvent(fileDeletion);
             }
 
-            LOGGER.debug("Metadata and files deleted, deleting collection");
+            LOGGER.debug("Metadata queued for deletion, deleting collection");
             collectionRepository.delete(collection);
             // Integration function start: Telemetry
             telemetryUtility.sendTelemetryEvent("file-delete-collection", Map.of(
@@ -802,6 +823,66 @@ public class FileService {
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
     }// Integration function end: Auth
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void deleteFileAfterCommit(FileDeletion fileDeletion) {
+        fileDeletionRepository.findById(fileDeletion.getId())
+                .ifPresent(this::deletePendingFile);
+    }
+
+    @Scheduled(fixedDelayString = "${file.deletion.retry.delay}")
+    @Transactional(readOnly = false)
+    public void reconcileFiles() {
+        LOGGER.debug("Attempting to reconcile files");
+
+        List<Metadata> metadataList = metadataRepository.findAll();
+        List<FileDeletion> fileDeletions = fileDeletionRepository.findAll();
+        Set<String> expectedFiles = new HashSet<>();
+
+        for(Metadata metadata : metadataList)
+            expectedFiles.add(metadata.getFileUUID());
+
+        for(FileDeletion fileDeletion : fileDeletions)
+            expectedFiles.add(fileDeletion.getFileUUID());
+
+        for(FileDeletion fileDeletion : fileDeletions)
+            deletePendingFile(fileDeletion);
+
+        try (var files = Files.list(uploadDir)) {
+            for(Path filePath : files.toList()) {
+                String fileName = filePath.getFileName().toString();
+
+                if(!Files.isRegularFile(filePath)
+                        || expectedFiles.contains(fileName)
+                        || Files.getLastModifiedTime(filePath).toMillis()
+                        > System.currentTimeMillis() - reconciliationMinAge)
+                    continue;
+
+                Files.deleteIfExists(filePath);
+                LOGGER.info("Orphaned file successfully deleted");
+            }
+        } catch(IOException ex) {
+            LOGGER.error("Failed to reconcile orphaned files: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
+        }
+
+        for(Metadata metadata : metadataList) {
+            if(!Files.exists(uploadDir.resolve(metadata.getFileUUID())))
+                LOGGER.error("Metadata exists without a physical file: " + metadata.getFileUUID());
+        }
+    }
+
+    private void deletePendingFile(FileDeletion fileDeletion) {
+        try {
+            Files.deleteIfExists(uploadDir.resolve(fileDeletion.getFileUUID()));
+            fileDeletionRepository.delete(fileDeletion);
+            LOGGER.info("File successfully deleted");
+        } catch(IOException ex) {
+            LOGGER.error("Failed to delete file: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
+        }
+    }
 
     private Cipher getCipher(int mode, Metadata metadata, long chunkIndex) throws Exception {
         if(!ENCRYPTION_VERSION.equals(metadata.getEncryptionVersion()))

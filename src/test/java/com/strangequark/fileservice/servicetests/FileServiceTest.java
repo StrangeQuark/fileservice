@@ -19,6 +19,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.Arrays;// Integration line: Auth
 import java.util.List;
 import java.util.UUID;// Integration line: Auth
@@ -37,12 +39,69 @@ public class FileServiceTest extends BaseServiceTest {
     }
 
     @Test
-    void deleteFileTest() {
+    void deleteFileTest() throws Exception {
         LOGGER.info("Begin deleteFileTest");
+
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+        Path filePath = uploadDir.resolve(metadata.getFileUUID());
 
         ResponseEntity<?> response = fileService.deleteFile(collectionName, fileName);
 
         Assertions.assertEquals(200, response.getStatusCode().value());
+        Assertions.assertTrue(metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).isEmpty());
+        Assertions.assertFalse(Files.exists(filePath));
+        Assertions.assertEquals(0, fileDeletionRepository.count());
+    }
+
+    @Test
+    void failedFileDeletionIsRetriedTest() throws Exception {
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+        Path originalFilePath = uploadDir.resolve(metadata.getFileUUID());
+        Path directoryPath = uploadDir.resolve("failedDelete");
+
+        Files.createDirectories(directoryPath);
+        Files.writeString(directoryPath.resolve("file.txt"), "data");
+        Files.deleteIfExists(originalFilePath);
+
+        metadata.setFileUUID("failedDelete");
+        metadataRepository.saveAndFlush(metadata);
+
+        ResponseEntity<?> response = fileService.deleteFile(collectionName, fileName);
+
+        Assertions.assertEquals(200, response.getStatusCode().value());
+        Assertions.assertEquals(1, fileDeletionRepository.count());
+
+        Files.deleteIfExists(directoryPath.resolve("file.txt"));
+        Files.deleteIfExists(directoryPath);
+
+        fileService.reconcileFiles();
+
+        Assertions.assertEquals(0, fileDeletionRepository.count());
+    }
+
+    @Test
+    void reconcileFilesDeletesOrphanedFileTest() throws Exception {
+        Path orphanedFilePath = uploadDir.resolve("orphanedFile.tmp");
+
+        Files.writeString(orphanedFilePath, "orphaned data");
+        Files.setLastModifiedTime(orphanedFilePath,
+                FileTime.fromMillis(System.currentTimeMillis() - 3600001));
+
+        fileService.reconcileFiles();
+
+        Assertions.assertFalse(Files.exists(orphanedFilePath));
+    }
+
+    @Test
+    void reconcileFilesReportsMissingPhysicalFileTest() throws Exception {
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+
+        Files.deleteIfExists(uploadDir.resolve(metadata.getFileUUID()));
+        fileService.reconcileFiles();
+
+        Assertions.assertTrue(metadataRepository
+                .findByCollectionIdAndFileName(collection.getId(), fileName)
+                .isPresent());
     }
 
     @Test
