@@ -18,7 +18,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.*;
 import org.springframework.http.MediaTypeFactory;
 import org.springframework.stereotype.Service;
@@ -27,15 +26,16 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import javax.crypto.Cipher;
-import javax.crypto.CipherInputStream;
-import javax.crypto.CipherOutputStream;
 import javax.crypto.SecretKey;
-import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.RandomAccessFile;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
@@ -46,8 +46,10 @@ import java.util.zip.ZipOutputStream;
 @Service
 public class FileService {
     private static final Logger LOGGER = LoggerFactory.getLogger(FileService.class);
-    private static final int AES_BLOCK_SIZE = 16;
-    private static final long STREAM_CHUNK_SIZE = 1024 * 1024;
+    private static final int GCM_IV_SIZE = 12;
+    private static final int GCM_TAG_SIZE = 16;
+    private static final int STREAM_CHUNK_SIZE = 1024 * 1024;
+    private static final String ENCRYPTION_VERSION = "AES_GCM_V1";
     @Value("${file.storage.path}")
     private Path uploadDir;
 
@@ -161,7 +163,7 @@ public class FileService {
     }
 
     @Transactional(readOnly = true)
-    public ResponseEntity<?> downloadFile(String collectionName, String fileName) {
+    public ResponseEntity<StreamingResponseBody> downloadFile(String collectionName, String fileName) {
         LOGGER.info("Attempting to download file");
         try {
             Collection collection = collectionRepository.findByName(collectionName)
@@ -170,10 +172,16 @@ public class FileService {
             collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
                     .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));// Integration function end: Auth
 
-            Path filePath = uploadDir.resolve(metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getFileUUID());
-
             Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
-            CipherInputStream decryptedStream = new CipherInputStream(Files.newInputStream(filePath), getCipher(Cipher.DECRYPT_MODE, metadata));
+            Path filePath = uploadDir.resolve(metadata.getFileUUID());
+            StreamingResponseBody stream = outputStream -> {
+                try {
+                    writeDecryptedFile(filePath, metadata, outputStream);
+                } catch(Exception ex) {
+                    LOGGER.error("Failed to decrypt file: " + ex.getMessage());
+                    throw new IOException("File download failed", ex);
+                }
+            };
             // Integration function start: Telemetry
             telemetryUtility.sendTelemetryEvent("file-download", Map.of(
                             "userId", jwtUtility.extractId(), // Integration line: Auth
@@ -188,17 +196,17 @@ public class FileService {
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                    .contentLength(metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getFileSize())
-                    .body(new InputStreamResource(decryptedStream));
+                    .contentLength(metadata.getFileSize())
+                    .body(stream);
         } catch (NoSuchElementException ex) {
             LOGGER.error("File not found: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
-            return ResponseEntity.status(404).body(new ErrorResponse("File not found"));
+            return ResponseEntity.status(404).build();
         }
         catch (Exception ex) {
             LOGGER.error("Failed to download file: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
-            return ResponseEntity.status(500).body(new ErrorResponse("File download failed"));
+            return ResponseEntity.status(500).build();
         }
     }
 
@@ -228,14 +236,7 @@ public class FileService {
                         entry.setSize(metadataItem.getFileSize());
                         zip.putNextEntry(entry);
 
-                        CipherInputStream decryptedStream = new CipherInputStream(Files.newInputStream(filePath), getCipher(Cipher.DECRYPT_MODE, metadataItem));
-
-                        byte[] buffer = new byte[8192];
-                        int length;
-
-                        while((length = decryptedStream.read(buffer)) > 0) {
-                            zip.write(buffer, 0, length);
-                        }
+                        writeDecryptedFile(filePath, metadataItem, zip);
 
                         zip.closeEntry();
                     }
@@ -347,26 +348,30 @@ public class FileService {
                 fileExtension = originalName.substring(originalName.lastIndexOf("."));
             }
 
-            Path filePath = uploadDir.resolve(fileUUID + fileExtension);
+            String storedFileName = fileUUID + fileExtension;
+            Path filePath = uploadDir.resolve(storedFileName);
 
             byte[] iv = generateIv();
-            CipherOutputStream cipherOut = new CipherOutputStream(Files.newOutputStream(filePath), getCipher(Cipher.ENCRYPT_MODE, iv, 0));
-            InputStream inputStream = file.getInputStream();
-            byte[] buffer = new byte[4096];
-            int bytesRead;
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                cipherOut.write(buffer, 0, bytesRead);
+            try (InputStream inputStream = file.getInputStream();
+                 OutputStream outputStream = Files.newOutputStream(filePath)) {
+                byte[] buffer = new byte[STREAM_CHUNK_SIZE];
+                int bytesRead;
+                long chunkIndex = 0;
+
+                while ((bytesRead = inputStream.readNBytes(buffer, 0, buffer.length)) > 0) {
+                    outputStream.write(encryptChunk(buffer, bytesRead, iv, storedFileName, file.getSize(), chunkIndex));
+                    chunkIndex++;
+                }
             }
-            cipherOut.close();
-            inputStream.close();
 
             Metadata metadata = new Metadata(
                     collection,
                     file.getOriginalFilename(),
-                    fileUUID + fileExtension,
+                    storedFileName,
                     file.getContentType(),
                     file.getSize(),
-                    Base64.getEncoder().encodeToString(iv)
+                    Base64.getEncoder().encodeToString(iv),
+                    ENCRYPTION_VERSION
             );
 
             metadataRepository.save(metadata);
@@ -787,23 +792,37 @@ public class FileService {
         }
     }// Integration function end: Auth
 
-    private Cipher getCipher(int mode, Metadata metadata) throws Exception {
-        return getCipher(mode, Base64.getDecoder().decode(metadata.getIv()), 0);
+    private Cipher getCipher(int mode, Metadata metadata, long chunkIndex) throws Exception {
+        if(!ENCRYPTION_VERSION.equals(metadata.getEncryptionVersion()))
+            throw new RuntimeException("Unsupported file encryption version");
+
+        return getCipher(
+                mode,
+                Base64.getDecoder().decode(metadata.getIv()),
+                metadata.getFileUUID(),
+                metadata.getFileSize(),
+                chunkIndex
+        );
     }
 
-    private Cipher getCipher(int mode, byte[] iv, long offset) throws Exception {
+    private Cipher getCipher(int mode, byte[] iv, String fileUUID, long fileSize, long chunkIndex) throws Exception {
         if (encryptionKey == null || encryptionKey.length() != 32) {
             throw new RuntimeException("Invalid ENCRYPTION_KEY (must be 32 characters for AES-256)");
         }
 
+        if (iv.length != GCM_IV_SIZE) {
+            throw new RuntimeException("Invalid file encryption IV");
+        }
+
         SecretKey secretKey = new SecretKeySpec(encryptionKey.getBytes(), "AES");
-        Cipher cipher = Cipher.getInstance("AES/CTR/NoPadding");
-        cipher.init(mode, secretKey, new IvParameterSpec(buildCounterIv(iv, offset / AES_BLOCK_SIZE)));
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(mode, secretKey, new GCMParameterSpec(128, buildChunkIv(iv, chunkIndex)));
+        cipher.updateAAD(getAuthenticatedData(fileUUID, fileSize, chunkIndex));
         return cipher;
     }
 
     private byte[] generateIv() {
-        byte[] iv = new byte[AES_BLOCK_SIZE];
+        byte[] iv = new byte[GCM_IV_SIZE];
         new SecureRandom().nextBytes(iv);
         return iv;
     }
@@ -847,41 +866,63 @@ public class FileService {
     }
 
     private byte[] decryptRegion(Path filePath, Metadata metadata, long start, long count) throws Exception {
-        long blockStart = (start / AES_BLOCK_SIZE) * AES_BLOCK_SIZE;
-        int offsetWithinBlock = (int) (start - blockStart);
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        long firstChunk = start / STREAM_CHUNK_SIZE;
+        long lastChunk = (start + count - 1) / STREAM_CHUNK_SIZE;
 
-        try (RandomAccessFile randomAccessFile = new RandomAccessFile(filePath.toFile(), "r")) {
-            randomAccessFile.seek(blockStart);
+        for(long chunkIndex = firstChunk; chunkIndex <= lastChunk; chunkIndex++) {
+            byte[] decryptedChunk = decryptChunk(filePath, metadata, chunkIndex);
+            long chunkStart = chunkIndex * STREAM_CHUNK_SIZE;
+            int startIndex = (int) Math.max(0, start - chunkStart);
+            int endIndex = (int) Math.min(decryptedChunk.length, start + count - chunkStart);
 
-            int bytesToRead = (int) Math.min(Integer.MAX_VALUE, count + offsetWithinBlock);
-            byte[] encryptedBytes = new byte[bytesToRead];
-            int bytesRead = randomAccessFile.read(encryptedBytes);
+            outputStream.write(decryptedChunk, startIndex, endIndex - startIndex);
+        }
 
-            if (bytesRead < 0) {
-                return new byte[0];
-            }
+        return outputStream.toByteArray();
+    }
 
-            if (bytesRead < encryptedBytes.length) {
-                encryptedBytes = Arrays.copyOf(encryptedBytes, bytesRead);
-            }
+    private byte[] encryptChunk(byte[] bytes, int bytesRead, byte[] iv, String fileUUID, long fileSize, long chunkIndex) throws Exception {
+        return getCipher(Cipher.ENCRYPT_MODE, iv, fileUUID, fileSize, chunkIndex)
+                .doFinal(bytes, 0, bytesRead);
+    }
 
-            byte[] decryptedBytes = getCipher(Cipher.DECRYPT_MODE, Base64.getDecoder().decode(metadata.getIv()), blockStart)
-                    .doFinal(encryptedBytes);
+    private void writeDecryptedFile(Path filePath, Metadata metadata, OutputStream outputStream) throws Exception {
+        long chunkCount = (metadata.getFileSize() + STREAM_CHUNK_SIZE - 1) / STREAM_CHUNK_SIZE;
 
-            return Arrays.copyOfRange(decryptedBytes, offsetWithinBlock, Math.min(decryptedBytes.length, offsetWithinBlock + (int) count));
+        for(long chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
+            outputStream.write(decryptChunk(filePath, metadata, chunkIndex));
         }
     }
 
-    private byte[] buildCounterIv(byte[] baseIv, long blockOffset) {
-        byte[] counterIv = Arrays.copyOf(baseIv, baseIv.length);
+    private byte[] decryptChunk(Path filePath, Metadata metadata, long chunkIndex) throws Exception {
+        long chunkStart = chunkIndex * STREAM_CHUNK_SIZE;
+        int plaintextLength = (int) Math.min(STREAM_CHUNK_SIZE, metadata.getFileSize() - chunkStart);
+        byte[] encryptedChunk = new byte[plaintextLength + GCM_TAG_SIZE];
 
-        for (int i = counterIv.length - 1; i >= 0 && blockOffset > 0; i--) {
-            long sum = (counterIv[i] & 0xFFL) + (blockOffset & 0xFFL);
-            counterIv[i] = (byte) sum;
-            blockOffset = (blockOffset >>> 8) + (sum >>> 8);
+        try (RandomAccessFile randomAccessFile = new RandomAccessFile(filePath.toFile(), "r")) {
+            randomAccessFile.seek(chunkIndex * (STREAM_CHUNK_SIZE + GCM_TAG_SIZE));
+            randomAccessFile.readFully(encryptedChunk);
         }
 
-        return counterIv;
+        return getCipher(Cipher.DECRYPT_MODE, metadata, chunkIndex).doFinal(encryptedChunk);
+    }
+
+    private byte[] getAuthenticatedData(String fileUUID, long fileSize, long chunkIndex) {
+        return (ENCRYPTION_VERSION + ":" + fileUUID + ":" + fileSize + ":" + chunkIndex)
+                .getBytes(StandardCharsets.UTF_8);
+    }
+
+    private byte[] buildChunkIv(byte[] baseIv, long chunkIndex) {
+        byte[] chunkIv = Arrays.copyOf(baseIv, baseIv.length);
+
+        for (int i = chunkIv.length - 1; i >= 0 && chunkIndex > 0; i--) {
+            long sum = (chunkIv[i] & 0xFFL) + (chunkIndex & 0xFFL);
+            chunkIv[i] = (byte) sum;
+            chunkIndex = (chunkIndex >>> 8) + (sum >>> 8);
+        }
+
+        return chunkIv;
     }
 
     private record RegionRequest(long start, long end, long count, boolean isPartial) {

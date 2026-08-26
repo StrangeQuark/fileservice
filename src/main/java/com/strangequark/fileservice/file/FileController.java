@@ -21,7 +21,7 @@ public class FileController {
     }
 
     @GetMapping("/download/{collectionName}/{fileName}")
-    public ResponseEntity<?> downloadFile(@PathVariable String collectionName, @PathVariable String fileName) {
+    public ResponseEntity<StreamingResponseBody> downloadFile(@PathVariable String collectionName, @PathVariable String fileName) {
         return fileService.downloadFile(collectionName, fileName);
     }
 

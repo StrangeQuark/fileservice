@@ -40,7 +40,8 @@ public class MetadataRepositoryTest {
                 UUID.randomUUID().toString() + ".file",
                 "file",
                 0L,
-                "test-iv-1"
+                "test-iv-1",
+                "AES_GCM_V1"
         );
 
         Metadata testMetadata2 = new Metadata(
@@ -49,7 +50,8 @@ public class MetadataRepositoryTest {
                 UUID.randomUUID().toString() + ".file",
                 "file",
                 0L,
-                "test-iv-2"
+                "test-iv-2",
+                "AES_GCM_V1"
         );
 
         testEntityManager.persistAndFlush(testMetadata);

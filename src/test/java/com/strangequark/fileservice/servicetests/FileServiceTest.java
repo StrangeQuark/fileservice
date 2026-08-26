@@ -10,8 +10,12 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Arrays;// Integration line: Auth
 import java.util.List;
 import java.util.UUID;// Integration line: Auth
@@ -39,12 +43,16 @@ public class FileServiceTest extends BaseServiceTest {
     }
 
     @Test
-    void downloadFileTest() {
+    void downloadFileTest() throws Exception {
         LOGGER.info("Begin downloadFileTest");
 
-        ResponseEntity<?> response = fileService.downloadFile(collectionName, fileName);
+        ResponseEntity<StreamingResponseBody> response = fileService.downloadFile(collectionName, fileName);
 
         Assertions.assertEquals(200, response.getStatusCode().value());
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        response.getBody().writeTo(outputStream);
+        Assertions.assertEquals("Test file data", outputStream.toString(StandardCharsets.UTF_8));
     }
 
     @Test
@@ -63,6 +71,56 @@ public class FileServiceTest extends BaseServiceTest {
         ResponseEntity<?> response = fileService.streamFile(collectionName, fileName, "");
 
         Assertions.assertEquals(200, response.getStatusCode().value());
+        Assertions.assertEquals("Test file data", new String((byte[]) response.getBody(), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void streamFileRejectsModifiedEncryptedFileTest() throws Exception {
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+        byte[] encryptedFile = Files.readAllBytes(uploadDir.resolve(metadata.getFileUUID()));
+
+        encryptedFile[0] ^= 1;
+        Files.write(uploadDir.resolve(metadata.getFileUUID()), encryptedFile);
+
+        ResponseEntity<?> response = fileService.streamFile(collectionName, fileName, "");
+
+        Assertions.assertEquals(500, response.getStatusCode().value());
+    }
+
+    @Test
+    void streamFileAcrossEncryptionChunkTest() throws Exception {
+        String largeFileName = "largeFile.txt";
+        byte[] fileContents = new byte[(1024 * 1024) + 10];
+
+        for(int i = 0; i < fileContents.length; i++) {
+            fileContents[i] = (byte) (i % 127);
+        }
+
+        ResponseEntity<?> uploadResponse = fileService.uploadFile(
+                new MockMultipartFile("largeFile", largeFileName, "text/plain", fileContents),
+                collectionName
+        );
+
+        Assertions.assertEquals(200, uploadResponse.getStatusCode().value());
+
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), largeFileName).get();
+
+        try {
+            ResponseEntity<?> response = fileService.streamFile(
+                    collectionName,
+                    largeFileName,
+                    "bytes=1048570-1048585"
+            );
+
+            Assertions.assertEquals(206, response.getStatusCode().value());
+            Assertions.assertArrayEquals(
+                    Arrays.copyOfRange(fileContents, 1048570, 1048586),
+                    (byte[]) response.getBody()
+            );
+        } finally {
+            Files.deleteIfExists(uploadDir.resolve(metadata.getFileUUID()));
+            metadataRepository.delete(metadata);
+        }
     }
 
     @Test
