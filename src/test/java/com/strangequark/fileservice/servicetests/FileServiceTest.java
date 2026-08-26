@@ -403,5 +403,21 @@ public class FileServiceTest extends BaseServiceTest {
 
         Assertions.assertEquals(200, response.getStatusCode().value());
         Assertions.assertTrue(collectionUserRepository.findByUserIdAndCollectionId(testUserUUID, collection.getId()).isEmpty());
+    }
+
+    @Test
+    void deleteOnlyUserFromAllCollectionsTest() {
+        LOGGER.info("Begin deleteOnlyUserFromAllCollectionsTest");
+
+        when(authUtility.getUserId("testUser")).thenReturn(testUserId.toString());
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+
+        ResponseEntity<?> response = fileService.deleteUserFromAllCollections(
+                new CollectionUserRequest(collectionName, "testUser", CollectionUserRole.OWNER)
+        );
+
+        Assertions.assertEquals(200, response.getStatusCode().value());
+        Assertions.assertTrue(collectionRepository.findByName(collectionName).isEmpty());
+        Assertions.assertFalse(Files.exists(uploadDir.resolve(metadata.getFileUUID())));
     }// Integration function end: Auth
 }

@@ -489,18 +489,7 @@ public class FileService {
                 throw new RuntimeException("Only collection OWNERs can delete collections.");
             }
             // Integration function end: Auth
-            LOGGER.debug("Queueing all files in collection for deletion");
-            for(Metadata metadata : collection.getMetadataList()) {
-                FileDeletion fileDeletion = fileDeletionRepository.save(new FileDeletion(
-                        collection.getId(),
-                        metadata.getFileName(),
-                        metadata.getFileUUID()
-                ));
-                applicationEventPublisher.publishEvent(fileDeletion);
-            }
-
-            LOGGER.debug("Metadata queued for deletion, deleting collection");
-            collectionRepository.delete(collection);
+            deleteCollectionAndFiles(collection);
             // Integration function start: Telemetry
             telemetryUtility.sendTelemetryEvent("file-delete-collection", Map.of(
                             "userId", jwtUtility.extractId(), // Integration line: Auth
@@ -753,6 +742,7 @@ public class FileService {
             List<Collection> collections = collectionUserRepository.findCollectionsByUserId(userId);
 
             List<Map<String, String>> errors = new ArrayList<>();
+            List<Collection> collectionsToDelete = new ArrayList<>();
 
             // First run through each collection to verify user is being properly removed
             for(Collection collection : collections) {
@@ -791,7 +781,7 @@ public class FileService {
                     if (ownerCount <= 1) {
                         // If the user being deleted is the only user in the collection, just delete the collection
                         if(collection.getCollectionUsers().size() == 1)
-                            collectionRepository.delete(collection);
+                            collectionsToDelete.add(collection);
                         else
                             errors.add(Map.of(collection.getName(), "Cannot remove the last OWNER from the collection"));
                     }
@@ -804,9 +794,13 @@ public class FileService {
                 return ResponseEntity.status(400).body(errors);
             }
 
+            for(Collection collection : collectionsToDelete)
+                deleteCollectionAndFiles(collection);
+
             // If all checks pass, remove user from all collections
             for(Collection collection : collections) {
-                collectionUserRepository.deleteCollectionUser(userId, collection.getId());
+                if(!collectionsToDelete.contains(collection))
+                    collectionUserRepository.deleteCollectionUser(userId, collection.getId());
             }
             // Integration function start: Telemetry
             telemetryUtility.sendTelemetryEvent("file-delete-user-from-all-collections", Map.of(
@@ -823,6 +817,21 @@ public class FileService {
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
     }// Integration function end: Auth
+
+    private void deleteCollectionAndFiles(Collection collection) {
+        LOGGER.debug("Queueing all files in collection for deletion");
+        for(Metadata metadata : collection.getMetadataList()) {
+            FileDeletion fileDeletion = fileDeletionRepository.save(new FileDeletion(
+                    collection.getId(),
+                    metadata.getFileName(),
+                    metadata.getFileUUID()
+            ));
+            applicationEventPublisher.publishEvent(fileDeletion);
+        }
+
+        LOGGER.debug("Metadata queued for deletion, deleting collection");
+        collectionRepository.delete(collection);
+    }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
