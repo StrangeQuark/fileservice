@@ -248,13 +248,19 @@ public class FileService {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             }
 
+            List<String> zipEntryNames = new ArrayList<>();
+            Set<String> usedZipEntryNames = new HashSet<>();
+
+            for(Metadata metadataItem : metadata)
+                zipEntryNames.add(getZipEntryName(metadataItem.getFileName(), usedZipEntryNames));
+
             StreamingResponseBody stream = outputStream -> {
-                try {
-                    ZipOutputStream zip = new ZipOutputStream(outputStream);
-                    for (Metadata metadataItem : metadata) {
+                try(ZipOutputStream zip = new ZipOutputStream(outputStream)) {
+                    for (int i = 0; i < metadata.size(); i++) {
+                        Metadata metadataItem = metadata.get(i);
                         Path filePath = uploadDir.resolve(metadataItem.getFileUUID());
 
-                        ZipEntry entry = new ZipEntry(metadataItem.getFileName());
+                        ZipEntry entry = new ZipEntry(zipEntryNames.get(i));
                         entry.setSize(metadataItem.getFileSize());
                         zip.putNextEntry(entry);
 
@@ -262,11 +268,10 @@ public class FileService {
 
                         zip.closeEntry();
                     }
-
-                    zip.finish();
                 } catch (Exception ex) {
                     LOGGER.error("Error when adding file to zip: " + ex.getMessage());
                     LOGGER.debug("Stack trace: ", ex);
+                    throw new IOException("File download failed", ex);
                 }
             };
             // Integration function start: Telemetry
@@ -993,25 +998,64 @@ public class FileService {
                 .doFinal(bytes, 0, bytesRead);
     }
 
+    private String getZipEntryName(String fileName, Set<String> usedZipEntryNames) {
+        String normalizedName = fileName.replace("\\", "/");
+
+        if(normalizedName.startsWith("/")
+                || normalizedName.matches("^[A-Za-z]:.*")
+                || normalizedName.contains("../")
+                || normalizedName.contains("\0"))
+            throw new RuntimeException("Invalid file name for ZIP download");
+
+        String zipEntryName = normalizedName.substring(normalizedName.lastIndexOf("/") + 1);
+
+        if(zipEntryName.isBlank() || zipEntryName.equals(".") || zipEntryName.equals(".."))
+            throw new RuntimeException("Invalid file name for ZIP download");
+
+        String name = zipEntryName;
+        String extension = "";
+        int extensionIndex = zipEntryName.lastIndexOf(".");
+
+        if(extensionIndex > 0) {
+            name = zipEntryName.substring(0, extensionIndex);
+            extension = zipEntryName.substring(extensionIndex);
+        }
+
+        int index = 1;
+        while(usedZipEntryNames.contains(zipEntryName)) {
+            zipEntryName = name + " (" + index + ")" + extension;
+            index++;
+        }
+
+        usedZipEntryNames.add(zipEntryName);
+        return zipEntryName;
+    }
+
     private void writeDecryptedFile(Path filePath, Metadata metadata, OutputStream outputStream) throws Exception {
         long chunkCount = (metadata.getFileSize() + STREAM_CHUNK_SIZE - 1) / STREAM_CHUNK_SIZE;
 
-        for(long chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
-            outputStream.write(decryptChunk(filePath, metadata, chunkIndex));
+        try(RandomAccessFile randomAccessFile = new RandomAccessFile(filePath.toFile(), "r")) {
+            for(long chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
+                outputStream.write(decryptChunk(randomAccessFile, metadata, chunkIndex));
+            }
         }
     }
 
-    private byte[] decryptChunk(Path filePath, Metadata metadata, long chunkIndex) throws Exception {
+    private byte[] decryptChunk(RandomAccessFile randomAccessFile, Metadata metadata, long chunkIndex) throws Exception {
         long chunkStart = chunkIndex * STREAM_CHUNK_SIZE;
         int plaintextLength = (int) Math.min(STREAM_CHUNK_SIZE, metadata.getFileSize() - chunkStart);
         byte[] encryptedChunk = new byte[plaintextLength + GCM_TAG_SIZE];
 
-        try (RandomAccessFile randomAccessFile = new RandomAccessFile(filePath.toFile(), "r")) {
-            randomAccessFile.seek(chunkIndex * (STREAM_CHUNK_SIZE + GCM_TAG_SIZE));
-            randomAccessFile.readFully(encryptedChunk);
-        }
+        randomAccessFile.seek(chunkIndex * (STREAM_CHUNK_SIZE + GCM_TAG_SIZE));
+        randomAccessFile.readFully(encryptedChunk);
 
         return getCipher(Cipher.DECRYPT_MODE, metadata, chunkIndex).doFinal(encryptedChunk);
+    }
+
+    private byte[] decryptChunk(Path filePath, Metadata metadata, long chunkIndex) throws Exception {
+        try (RandomAccessFile randomAccessFile = new RandomAccessFile(filePath.toFile(), "r")) {
+            return decryptChunk(randomAccessFile, metadata, chunkIndex);
+        }
     }
 
     private byte[] getAuthenticatedData(String fileUUID, long fileSize, long chunkIndex) {

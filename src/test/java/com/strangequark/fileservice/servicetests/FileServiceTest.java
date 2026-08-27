@@ -13,6 +13,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -21,9 +22,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.util.ArrayList;
 import java.util.Arrays;// Integration line: Auth
 import java.util.List;
 import java.util.UUID;// Integration line: Auth
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import static org.mockito.Mockito.when;// Integration line: Auth
 
@@ -118,12 +122,82 @@ public class FileServiceTest extends BaseServiceTest {
     }
 
     @Test
-    void downloadAllFilesTest() {
+    void downloadAllFilesTest() throws Exception {
         LOGGER.info("Begin downloadAllFilesTest");
+
+        ResponseEntity<StreamingResponseBody> response = fileService.downloadAllFiles(collectionName);
+
+        Assertions.assertEquals(200, response.getStatusCode().value());
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        response.getBody().writeTo(outputStream);
+
+        try(ZipInputStream zipInputStream = new ZipInputStream(
+                new ByteArrayInputStream(outputStream.toByteArray())
+        )) {
+            ZipEntry entry = zipInputStream.getNextEntry();
+
+            Assertions.assertNotNull(entry);
+            Assertions.assertEquals(fileName, entry.getName());
+            Assertions.assertEquals("Test file data",
+                    new String(zipInputStream.readAllBytes(), StandardCharsets.UTF_8));
+            Assertions.assertNull(zipInputStream.getNextEntry());
+        }
+    }
+
+    @Test
+    void downloadAllFilesRejectsUnsafeFileNameTest() {
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+        metadata.setFileName("../test.txt");
+        metadataRepository.save(metadata);
 
         ResponseEntity<?> response = fileService.downloadAllFiles(collectionName);
 
-        Assertions.assertEquals(200, response.getStatusCode().value());
+        Assertions.assertEquals(500, response.getStatusCode().value());
+    }
+
+    @Test
+    void downloadAllFilesHandlesMatchingFileNamesTest() throws Exception {
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+        metadata.setFileName("folder-one/file.txt");
+        metadataRepository.save(metadata);
+
+        metadataRepository.save(new Metadata(
+                collection,
+                "folder-two/file.txt",
+                metadata.getFileUUID(),
+                metadata.getFileType(),
+                metadata.getFileSize(),
+                metadata.getIv(),
+                metadata.getEncryptionVersion()
+        ));
+
+        ResponseEntity<StreamingResponseBody> response = fileService.downloadAllFiles(collectionName);
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        response.getBody().writeTo(outputStream);
+
+        List<String> fileNames = new ArrayList<>();
+        try(ZipInputStream zipInputStream = new ZipInputStream(
+                new ByteArrayInputStream(outputStream.toByteArray())
+        )) {
+            ZipEntry entry;
+            while((entry = zipInputStream.getNextEntry()) != null)
+                fileNames.add(entry.getName());
+        }
+
+        Assertions.assertTrue(fileNames.contains("file.txt"));
+        Assertions.assertTrue(fileNames.contains("file (1).txt"));
+    }
+
+    @Test
+    void downloadAllFilesFailsWhenFileCannotBeReadTest() throws Exception {
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+        ResponseEntity<StreamingResponseBody> response = fileService.downloadAllFiles(collectionName);
+
+        Files.delete(uploadDir.resolve(metadata.getFileUUID()));
+
+        Assertions.assertThrows(IOException.class,
+                () -> response.getBody().writeTo(new ByteArrayOutputStream()));
     }
 
     @Test
