@@ -419,5 +419,48 @@ public class FileServiceTest extends BaseServiceTest {
         Assertions.assertEquals(200, response.getStatusCode().value());
         Assertions.assertTrue(collectionRepository.findByName(collectionName).isEmpty());
         Assertions.assertFalse(Files.exists(uploadDir.resolve(metadata.getFileUUID())));
+    }
+
+    @Test
+    void deleteUserFromAllCollectionsDoesNotPartiallyDeleteTest() {
+        UUID targetUserId = UUID.randomUUID();
+        Collection protectedCollection = new Collection("protectedCollection_" + UUID.randomUUID());
+        collectionRepository.save(protectedCollection);
+
+        collectionUserRepository.save(new CollectionUser(
+                collection,
+                targetUserId,
+                CollectionUserRole.READ_WRITE
+        ));
+        collectionUserRepository.save(new CollectionUser(
+                protectedCollection,
+                testUserId,
+                CollectionUserRole.MANAGER
+        ));
+        collectionUserRepository.save(new CollectionUser(
+                protectedCollection,
+                targetUserId,
+                CollectionUserRole.OWNER
+        ));
+        collectionUserRepository.save(new CollectionUser(
+                protectedCollection,
+                UUID.randomUUID(),
+                CollectionUserRole.READ_WRITE
+        ));
+
+        when(authUtility.getUserId("testUser")).thenReturn(targetUserId.toString());
+
+        ResponseEntity<?> response = fileService.deleteUserFromAllCollections(
+                new CollectionUserRequest(collectionName, "testUser", CollectionUserRole.READ_WRITE)
+        );
+
+        Assertions.assertEquals(400, response.getStatusCode().value());
+        Assertions.assertTrue(collectionUserRepository
+                .findByUserIdAndCollectionId(targetUserId, collection.getId())
+                .isPresent());
+        Assertions.assertTrue(collectionUserRepository
+                .findByUserIdAndCollectionId(targetUserId, protectedCollection.getId())
+                .isPresent());
+        Assertions.assertTrue(collectionRepository.findByName(protectedCollection.getName()).isPresent());
     }// Integration function end: Auth
 }

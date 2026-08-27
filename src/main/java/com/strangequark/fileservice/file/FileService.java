@@ -477,7 +477,7 @@ public class FileService {
         LOGGER.info("Attempting to delete collection and all associated files");
 
         try {
-            Collection collection = collectionRepository.findByName(collectionName)
+            Collection collection = collectionRepository.findByNameForUpdate(collectionName)
                     .orElseThrow(() -> new RuntimeException("Unable to locate collection when attempting to delete"));
 
             // Integration function start: Auth
@@ -501,6 +501,7 @@ public class FileService {
             LOGGER.info("Collection successfully deleted");
             return ResponseEntity.ok("Collection and children files successfully deleted");
         } catch (RuntimeException ex) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             LOGGER.error("Failed to delete collection: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
@@ -559,7 +560,7 @@ public class FileService {
         LOGGER.info("Attempting to update user's role");
 
         try {
-            Collection collection = collectionRepository.findByName(collectionUserRequest.getCollectionName())
+            Collection collection = collectionRepository.findByNameForUpdate(collectionUserRequest.getCollectionName())
                     .orElseThrow(() -> new RuntimeException("Collection with this name does not exist"));
 
             CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
@@ -616,6 +617,7 @@ public class FileService {
             LOGGER.info("User role successfully updated");
             return ResponseEntity.ok("User role successfully updated");
         } catch (Exception ex) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             LOGGER.error("Failed to update user role: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
@@ -627,7 +629,7 @@ public class FileService {
         LOGGER.info("Attempting to add user to collection");
 
         try {
-            Collection collection = collectionRepository.findByName(collectionUserRequest.getCollectionName())
+            Collection collection = collectionRepository.findByNameForUpdate(collectionUserRequest.getCollectionName())
                     .orElseThrow(() -> new RuntimeException("Collection with this name does not exist"));
 
             CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
@@ -664,6 +666,7 @@ public class FileService {
             LOGGER.info("User successfully added to collection");
             return ResponseEntity.ok("User successfully added to collection");
         } catch(RuntimeException ex) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             LOGGER.error("Failed to add user to collection: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
@@ -675,7 +678,7 @@ public class FileService {
         LOGGER.info("Attempting to delete user from collection");
 
         try {
-            Collection collection = collectionRepository.findByName(collectionUserRequest.getCollectionName())
+            Collection collection = collectionRepository.findByNameForUpdate(collectionUserRequest.getCollectionName())
                     .orElseThrow(() -> new RuntimeException("Collection with this name does not exist"));
 
             CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
@@ -721,6 +724,7 @@ public class FileService {
             LOGGER.info("User successfully deleted from collection");
             return ResponseEntity.ok("User successfully deleted from collection");
         } catch(RuntimeException ex) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             LOGGER.error("Failed to delete user from collection: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
@@ -739,7 +743,7 @@ public class FileService {
             }
             UUID userId = UUID.fromString(userIdStr);
 
-            List<Collection> collections = collectionUserRepository.findCollectionsByUserId(userId);
+            List<Collection> collections = collectionUserRepository.findCollectionsByUserIdForUpdate(userId);
 
             List<Map<String, String>> errors = new ArrayList<>();
             List<Collection> collectionsToDelete = new ArrayList<>();
@@ -812,6 +816,7 @@ public class FileService {
             LOGGER.info("User successfully deleted from all collections");
             return ResponseEntity.ok("User successfully deleted from all collections");
         } catch(RuntimeException ex) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             LOGGER.error("Failed to delete user from all collections: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
