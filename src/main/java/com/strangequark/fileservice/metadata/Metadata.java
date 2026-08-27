@@ -18,13 +18,14 @@ public class Metadata {
 
     }
 
-    public Metadata(Collection collection, String fileName, String fileUUID, String fileType, Long fileSize, String iv) {
+    public Metadata(Collection collection, String fileName, String fileUUID, String fileType, Long fileSize, String iv, String encryptionVersion) {
         this.collection = collection;
         this.fileName = fileName;
         this.fileUUID = fileUUID;
         this.fileType = fileType;
         this.fileSize = fileSize;
         this.iv = iv;
+        this.encryptionVersion = encryptionVersion;
     }
 
     @Id
@@ -55,6 +56,9 @@ public class Metadata {
     @Convert(converter = StringEncryptDecryptConverter.class)
     @Column(nullable = false)
     private String iv;
+
+    @Column(name = "encryption_version")
+    private String encryptionVersion;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Convert(converter = LocalDateTimeEncryptDecryptConverter.class)
@@ -121,6 +125,14 @@ public class Metadata {
 
     public void setIv(String iv) {
         this.iv = iv;
+    }
+
+    public String getEncryptionVersion() {
+        return encryptionVersion;
+    }
+
+    public void setEncryptionVersion(String encryptionVersion) {
+        this.encryptionVersion = encryptionVersion;
     }
 
     public LocalDateTime getCreatedAt() {

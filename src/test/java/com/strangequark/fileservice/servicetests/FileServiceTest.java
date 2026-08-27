@@ -10,8 +10,17 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.Arrays;// Integration line: Auth
 import java.util.List;
 import java.util.UUID;// Integration line: Auth
@@ -30,21 +39,82 @@ public class FileServiceTest extends BaseServiceTest {
     }
 
     @Test
-    void deleteFileTest() {
+    void deleteFileTest() throws Exception {
         LOGGER.info("Begin deleteFileTest");
+
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+        Path filePath = uploadDir.resolve(metadata.getFileUUID());
 
         ResponseEntity<?> response = fileService.deleteFile(collectionName, fileName);
 
         Assertions.assertEquals(200, response.getStatusCode().value());
+        Assertions.assertTrue(metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).isEmpty());
+        Assertions.assertFalse(Files.exists(filePath));
+        Assertions.assertEquals(0, fileDeletionRepository.count());
     }
 
     @Test
-    void downloadFileTest() {
-        LOGGER.info("Begin downloadFileTest");
+    void failedFileDeletionIsRetriedTest() throws Exception {
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+        Path originalFilePath = uploadDir.resolve(metadata.getFileUUID());
+        Path directoryPath = uploadDir.resolve("failedDelete");
 
-        ResponseEntity<?> response = fileService.downloadFile(collectionName, fileName);
+        Files.createDirectories(directoryPath);
+        Files.writeString(directoryPath.resolve("file.txt"), "data");
+        Files.deleteIfExists(originalFilePath);
+
+        metadata.setFileUUID("failedDelete");
+        metadataRepository.saveAndFlush(metadata);
+
+        ResponseEntity<?> response = fileService.deleteFile(collectionName, fileName);
 
         Assertions.assertEquals(200, response.getStatusCode().value());
+        Assertions.assertEquals(1, fileDeletionRepository.count());
+
+        Files.deleteIfExists(directoryPath.resolve("file.txt"));
+        Files.deleteIfExists(directoryPath);
+
+        fileService.reconcileFiles();
+
+        Assertions.assertEquals(0, fileDeletionRepository.count());
+    }
+
+    @Test
+    void reconcileFilesDeletesOrphanedFileTest() throws Exception {
+        Path orphanedFilePath = uploadDir.resolve("orphanedFile.tmp");
+
+        Files.writeString(orphanedFilePath, "orphaned data");
+        Files.setLastModifiedTime(orphanedFilePath,
+                FileTime.fromMillis(System.currentTimeMillis() - 3600001));
+
+        fileService.reconcileFiles();
+
+        Assertions.assertFalse(Files.exists(orphanedFilePath));
+    }
+
+    @Test
+    void reconcileFilesReportsMissingPhysicalFileTest() throws Exception {
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+
+        Files.deleteIfExists(uploadDir.resolve(metadata.getFileUUID()));
+        fileService.reconcileFiles();
+
+        Assertions.assertTrue(metadataRepository
+                .findByCollectionIdAndFileName(collection.getId(), fileName)
+                .isPresent());
+    }
+
+    @Test
+    void downloadFileTest() throws Exception {
+        LOGGER.info("Begin downloadFileTest");
+
+        ResponseEntity<StreamingResponseBody> response = fileService.downloadFile(collectionName, fileName);
+
+        Assertions.assertEquals(200, response.getStatusCode().value());
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        response.getBody().writeTo(outputStream);
+        Assertions.assertEquals("Test file data", outputStream.toString(StandardCharsets.UTF_8));
     }
 
     @Test
@@ -63,6 +133,56 @@ public class FileServiceTest extends BaseServiceTest {
         ResponseEntity<?> response = fileService.streamFile(collectionName, fileName, "");
 
         Assertions.assertEquals(200, response.getStatusCode().value());
+        Assertions.assertEquals("Test file data", new String((byte[]) response.getBody(), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void streamFileRejectsModifiedEncryptedFileTest() throws Exception {
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+        byte[] encryptedFile = Files.readAllBytes(uploadDir.resolve(metadata.getFileUUID()));
+
+        encryptedFile[0] ^= 1;
+        Files.write(uploadDir.resolve(metadata.getFileUUID()), encryptedFile);
+
+        ResponseEntity<?> response = fileService.streamFile(collectionName, fileName, "");
+
+        Assertions.assertEquals(500, response.getStatusCode().value());
+    }
+
+    @Test
+    void streamFileAcrossEncryptionChunkTest() throws Exception {
+        String largeFileName = "largeFile.txt";
+        byte[] fileContents = new byte[(1024 * 1024) + 10];
+
+        for(int i = 0; i < fileContents.length; i++) {
+            fileContents[i] = (byte) (i % 127);
+        }
+
+        ResponseEntity<?> uploadResponse = fileService.uploadFile(
+                new MockMultipartFile("largeFile", largeFileName, "text/plain", fileContents),
+                collectionName
+        );
+
+        Assertions.assertEquals(200, uploadResponse.getStatusCode().value());
+
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), largeFileName).get();
+
+        try {
+            ResponseEntity<?> response = fileService.streamFile(
+                    collectionName,
+                    largeFileName,
+                    "bytes=1048570-1048585"
+            );
+
+            Assertions.assertEquals(206, response.getStatusCode().value());
+            Assertions.assertArrayEquals(
+                    Arrays.copyOfRange(fileContents, 1048570, 1048586),
+                    (byte[]) response.getBody()
+            );
+        } finally {
+            Files.deleteIfExists(uploadDir.resolve(metadata.getFileUUID()));
+            metadataRepository.delete(metadata);
+        }
     }
 
     @Test
@@ -94,6 +214,50 @@ public class FileServiceTest extends BaseServiceTest {
 
         Assertions.assertTrue(file.delete());
         LOGGER.info("uploadFileTest cleanup successful");
+    }
+
+    @Test
+    void failedUploadDeletesTemporaryFileTest() throws Exception {
+        LOGGER.info("Begin failedUploadDeletesTemporaryFileTest");
+
+        long filesBefore;
+        try (var files = Files.list(uploadDir)) {
+            filesBefore = files.count();
+        }
+
+        MultipartFile failingFile = org.mockito.Mockito.mock(MultipartFile.class);
+        org.mockito.Mockito.when(failingFile.getOriginalFilename()).thenReturn("failedUpload.txt");
+        org.mockito.Mockito.when(failingFile.getContentType()).thenReturn("text/plain");
+        org.mockito.Mockito.when(failingFile.getSize()).thenReturn((long) (1024 * 1024) + 1);
+        org.mockito.Mockito.when(failingFile.getInputStream()).thenReturn(new InputStream() {
+            private boolean firstRead = true;
+
+            @Override
+            public int read() throws IOException {
+                throw new IOException("Failed to read upload");
+            }
+
+            @Override
+            public int read(byte[] bytes, int offset, int length) throws IOException {
+                if(firstRead) {
+                    firstRead = false;
+                    return length;
+                }
+
+                throw new IOException("Failed to read upload");
+            }
+        });
+
+        ResponseEntity<?> response = fileService.uploadFile(failingFile, collectionName);
+
+        Assertions.assertEquals(500, response.getStatusCode().value());
+        Assertions.assertTrue(metadataRepository
+                .findByCollectionIdAndFileName(collection.getId(), "failedUpload.txt")
+                .isEmpty());
+
+        try (var files = Files.list(uploadDir)) {
+            Assertions.assertEquals(filesBefore, files.count());
+        }
     }
 
     @Test
@@ -239,5 +403,21 @@ public class FileServiceTest extends BaseServiceTest {
 
         Assertions.assertEquals(200, response.getStatusCode().value());
         Assertions.assertTrue(collectionUserRepository.findByUserIdAndCollectionId(testUserUUID, collection.getId()).isEmpty());
+    }
+
+    @Test
+    void deleteOnlyUserFromAllCollectionsTest() {
+        LOGGER.info("Begin deleteOnlyUserFromAllCollectionsTest");
+
+        when(authUtility.getUserId("testUser")).thenReturn(testUserId.toString());
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+
+        ResponseEntity<?> response = fileService.deleteUserFromAllCollections(
+                new CollectionUserRequest(collectionName, "testUser", CollectionUserRole.OWNER)
+        );
+
+        Assertions.assertEquals(200, response.getStatusCode().value());
+        Assertions.assertTrue(collectionRepository.findByName(collectionName).isEmpty());
+        Assertions.assertFalse(Files.exists(uploadDir.resolve(metadata.getFileUUID())));
     }// Integration function end: Auth
 }

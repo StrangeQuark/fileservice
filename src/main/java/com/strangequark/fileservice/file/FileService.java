@@ -6,6 +6,8 @@ import com.strangequark.fileservice.collectionuser.CollectionUser;// Integration
 import com.strangequark.fileservice.collectionuser.CollectionUserRepository;// Integration line: Auth
 import com.strangequark.fileservice.collectionuser.CollectionUserRequest;// Integration line: Auth
 import com.strangequark.fileservice.collectionuser.CollectionUserRole;// Integration line: Auth
+import com.strangequark.fileservice.filedeletion.FileDeletion;
+import com.strangequark.fileservice.filedeletion.FileDeletionRepository;
 import com.strangequark.fileservice.response.ErrorResponse;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
@@ -17,27 +19,33 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.*;
 import org.springframework.http.MediaTypeFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import javax.crypto.Cipher;
-import javax.crypto.CipherInputStream;
-import javax.crypto.CipherOutputStream;
 import javax.crypto.SecretKey;
-import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
-import java.io.File;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.RandomAccessFile;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.SecureRandom;
 import java.util.*;
 import java.util.zip.ZipEntry;
@@ -46,13 +54,19 @@ import java.util.zip.ZipOutputStream;
 @Service
 public class FileService {
     private static final Logger LOGGER = LoggerFactory.getLogger(FileService.class);
-    private static final int AES_BLOCK_SIZE = 16;
-    private static final long STREAM_CHUNK_SIZE = 1024 * 1024;
+    private static final int GCM_IV_SIZE = 12;
+    private static final int GCM_TAG_SIZE = 16;
+    private static final int STREAM_CHUNK_SIZE = 1024 * 1024;
+    private static final String ENCRYPTION_VERSION = "AES_GCM_V1";
     @Value("${file.storage.path}")
     private Path uploadDir;
+    @Value("${file.reconciliation.min.age}")
+    private long reconciliationMinAge;
 
     private final MetadataRepository metadataRepository;
     private final CollectionRepository collectionRepository;
+    private final FileDeletionRepository fileDeletionRepository;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Value("${ENCRYPTION_KEY}")
     private String encryptionKey;
@@ -69,9 +83,12 @@ public class FileService {
     TelemetryUtility telemetryUtility;
     // Integration function end: Telemetry
 
-    public FileService(MetadataRepository metadataRepository, CollectionRepository collectionRepository) {
+    public FileService(MetadataRepository metadataRepository, CollectionRepository collectionRepository,
+                       FileDeletionRepository fileDeletionRepository, ApplicationEventPublisher applicationEventPublisher) {
         this.metadataRepository = metadataRepository;
         this.collectionRepository = collectionRepository;
+        this.fileDeletionRepository = fileDeletionRepository;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     @PostConstruct
@@ -128,27 +145,34 @@ public class FileService {
                 throw new RuntimeException("Only collection users with OWNER, MANAGER, or READWRITE roles can delete files");
             }
             // Integration function end: Auth
-            Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
-            File file = new File("uploads/" + metadata.getFileUUID());
+            Optional<Metadata> metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName);
 
-            if (file.delete()) {
-                metadataRepository.delete(metadata);
-                // Integration function start: Telemetry
-                telemetryUtility.sendTelemetryEvent("file-delete", Map.of(
-                                "userId", jwtUtility.extractId(), // Integration line: Auth
-                                "collection-id", collection.getId(),
-                                "collection-name", collection.getName(),
-                                "file-id", metadata.getId(),
-                                "file-name", metadata.getFileName()
-                        )
-                ); // Integration function end: Telemetry
+            if(metadata.isEmpty()) {
+                if(fileDeletionRepository.findByCollectionIdAndFileName(collection.getId(), fileName).isPresent())
+                    return ResponseEntity.ok("File deletion already pending");
 
-                LOGGER.info("File successfully deleted");
-                return ResponseEntity.ok("File successfully deleted");
+                throw new NoSuchElementException("File does not exist");
             }
 
-            LOGGER.error("File failed to delete");
-            return ResponseEntity.status(400).body("File failed to delete");
+            FileDeletion fileDeletion = fileDeletionRepository.save(new FileDeletion(
+                    collection.getId(),
+                    metadata.get().getFileName(),
+                    metadata.get().getFileUUID()
+            ));
+            metadataRepository.delete(metadata.get());
+            applicationEventPublisher.publishEvent(fileDeletion);
+            // Integration function start: Telemetry
+            telemetryUtility.sendTelemetryEvent("file-delete", Map.of(
+                            "userId", jwtUtility.extractId(), // Integration line: Auth
+                            "collection-id", collection.getId(),
+                            "collection-name", collection.getName(),
+                            "file-id", metadata.get().getId(),
+                            "file-name", metadata.get().getFileName()
+                    )
+            ); // Integration function end: Telemetry
+
+            LOGGER.info("File deletion successfully queued");
+            return ResponseEntity.ok("File deletion successfully queued");
         } catch (NoSuchElementException ex) {
             LOGGER.error("File does not exist: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
@@ -161,7 +185,7 @@ public class FileService {
     }
 
     @Transactional(readOnly = true)
-    public ResponseEntity<?> downloadFile(String collectionName, String fileName) {
+    public ResponseEntity<StreamingResponseBody> downloadFile(String collectionName, String fileName) {
         LOGGER.info("Attempting to download file");
         try {
             Collection collection = collectionRepository.findByName(collectionName)
@@ -170,10 +194,16 @@ public class FileService {
             collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
                     .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));// Integration function end: Auth
 
-            Path filePath = uploadDir.resolve(metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getFileUUID());
-
             Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
-            CipherInputStream decryptedStream = new CipherInputStream(Files.newInputStream(filePath), getCipher(Cipher.DECRYPT_MODE, metadata));
+            Path filePath = uploadDir.resolve(metadata.getFileUUID());
+            StreamingResponseBody stream = outputStream -> {
+                try {
+                    writeDecryptedFile(filePath, metadata, outputStream);
+                } catch(Exception ex) {
+                    LOGGER.error("Failed to decrypt file: " + ex.getMessage());
+                    throw new IOException("File download failed", ex);
+                }
+            };
             // Integration function start: Telemetry
             telemetryUtility.sendTelemetryEvent("file-download", Map.of(
                             "userId", jwtUtility.extractId(), // Integration line: Auth
@@ -188,17 +218,17 @@ public class FileService {
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                    .contentLength(metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get().getFileSize())
-                    .body(new InputStreamResource(decryptedStream));
+                    .contentLength(metadata.getFileSize())
+                    .body(stream);
         } catch (NoSuchElementException ex) {
             LOGGER.error("File not found: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
-            return ResponseEntity.status(404).body(new ErrorResponse("File not found"));
+            return ResponseEntity.status(404).build();
         }
         catch (Exception ex) {
             LOGGER.error("Failed to download file: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
-            return ResponseEntity.status(500).body(new ErrorResponse("File download failed"));
+            return ResponseEntity.status(500).build();
         }
     }
 
@@ -228,14 +258,7 @@ public class FileService {
                         entry.setSize(metadataItem.getFileSize());
                         zip.putNextEntry(entry);
 
-                        CipherInputStream decryptedStream = new CipherInputStream(Files.newInputStream(filePath), getCipher(Cipher.DECRYPT_MODE, metadataItem));
-
-                        byte[] buffer = new byte[8192];
-                        int length;
-
-                        while((length = decryptedStream.read(buffer)) > 0) {
-                            zip.write(buffer, 0, length);
-                        }
+                        writeDecryptedFile(filePath, metadataItem, zip);
 
                         zip.closeEntry();
                     }
@@ -347,43 +370,56 @@ public class FileService {
                 fileExtension = originalName.substring(originalName.lastIndexOf("."));
             }
 
-            Path filePath = uploadDir.resolve(fileUUID + fileExtension);
+            String storedFileName = fileUUID + fileExtension;
+            Path filePath = uploadDir.resolve(storedFileName);
+            Path tempFilePath = uploadDir.resolve(storedFileName + ".tmp");
 
             byte[] iv = generateIv();
-            CipherOutputStream cipherOut = new CipherOutputStream(Files.newOutputStream(filePath), getCipher(Cipher.ENCRYPT_MODE, iv, 0));
-            InputStream inputStream = file.getInputStream();
-            byte[] buffer = new byte[4096];
-            int bytesRead;
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                cipherOut.write(buffer, 0, bytesRead);
+            try {
+                try (InputStream inputStream = file.getInputStream();
+                     OutputStream outputStream = Files.newOutputStream(tempFilePath)) {
+                    byte[] buffer = new byte[STREAM_CHUNK_SIZE];
+                    int bytesRead;
+                    long chunkIndex = 0;
+
+                    while ((bytesRead = inputStream.readNBytes(buffer, 0, buffer.length)) > 0) {
+                        outputStream.write(encryptChunk(buffer, bytesRead, iv, storedFileName, file.getSize(), chunkIndex));
+                        chunkIndex++;
+                    }
+                }
+
+                Metadata metadata = new Metadata(
+                        collection,
+                        file.getOriginalFilename(),
+                        storedFileName,
+                        file.getContentType(),
+                        file.getSize(),
+                        Base64.getEncoder().encodeToString(iv),
+                        ENCRYPTION_VERSION
+                );
+
+                Files.move(tempFilePath, filePath, StandardCopyOption.ATOMIC_MOVE);
+                metadataRepository.saveAndFlush(metadata);
+                // Integration function start: Telemetry
+                telemetryUtility.sendTelemetryEvent("file-upload", Map.of(
+                                "userId", jwtUtility.extractId(), // Integration line: Auth
+                                "collection-id", collection.getId(),
+                                "collection-name", collection.getName(),
+                                "file-id", metadata.getId(),
+                                "file-name", metadata.getFileName(),
+                                "file-size", metadata.getFileSize()
+                        )
+                ); // Integration function end: Telemetry
+
+                LOGGER.info("File successfully uploaded");
+                return ResponseEntity.ok(new UploadResponse("File successfully uploaded"));
+            } catch(Exception ex) {
+                Files.deleteIfExists(tempFilePath);
+                Files.deleteIfExists(filePath);
+                throw ex;
             }
-            cipherOut.close();
-            inputStream.close();
-
-            Metadata metadata = new Metadata(
-                    collection,
-                    file.getOriginalFilename(),
-                    fileUUID + fileExtension,
-                    file.getContentType(),
-                    file.getSize(),
-                    Base64.getEncoder().encodeToString(iv)
-            );
-
-            metadataRepository.save(metadata);
-            // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-upload", Map.of(
-                            "userId", jwtUtility.extractId(), // Integration line: Auth
-                            "collection-id", collection.getId(),
-                            "collection-name", collection.getName(),
-                            "file-id", metadata.getId(),
-                            "file-name", metadata.getFileName(),
-                            "file-size", metadata.getFileSize()
-                    )
-            ); // Integration function end: Telemetry
-
-            LOGGER.info("File successfully uploaded");
-            return ResponseEntity.ok(new UploadResponse("File successfully uploaded"));
         } catch (Exception ex) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             LOGGER.error("Failed to upload file: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(500).body(new ErrorResponse("File upload failed"));
@@ -453,17 +489,7 @@ public class FileService {
                 throw new RuntimeException("Only collection OWNERs can delete collections.");
             }
             // Integration function end: Auth
-            LOGGER.debug("Deleting all files and metadata in collection metadata list");
-            for(Metadata metadata : collection.getMetadataList()) {
-                LOGGER.debug("Deleting file " + metadata.getFileUUID());
-                deleteFile(collectionName, metadata.getFileName());
-
-                LOGGER.debug("Deleting metadata " + metadata.getId());
-                metadataRepository.delete(metadata);
-            }
-
-            LOGGER.debug("Metadata and files deleted, deleting collection");
-            collectionRepository.delete(collection);
+            deleteCollectionAndFiles(collection);
             // Integration function start: Telemetry
             telemetryUtility.sendTelemetryEvent("file-delete-collection", Map.of(
                             "userId", jwtUtility.extractId(), // Integration line: Auth
@@ -716,6 +742,7 @@ public class FileService {
             List<Collection> collections = collectionUserRepository.findCollectionsByUserId(userId);
 
             List<Map<String, String>> errors = new ArrayList<>();
+            List<Collection> collectionsToDelete = new ArrayList<>();
 
             // First run through each collection to verify user is being properly removed
             for(Collection collection : collections) {
@@ -754,7 +781,7 @@ public class FileService {
                     if (ownerCount <= 1) {
                         // If the user being deleted is the only user in the collection, just delete the collection
                         if(collection.getCollectionUsers().size() == 1)
-                            collectionRepository.delete(collection);
+                            collectionsToDelete.add(collection);
                         else
                             errors.add(Map.of(collection.getName(), "Cannot remove the last OWNER from the collection"));
                     }
@@ -767,9 +794,13 @@ public class FileService {
                 return ResponseEntity.status(400).body(errors);
             }
 
+            for(Collection collection : collectionsToDelete)
+                deleteCollectionAndFiles(collection);
+
             // If all checks pass, remove user from all collections
             for(Collection collection : collections) {
-                collectionUserRepository.deleteCollectionUser(userId, collection.getId());
+                if(!collectionsToDelete.contains(collection))
+                    collectionUserRepository.deleteCollectionUser(userId, collection.getId());
             }
             // Integration function start: Telemetry
             telemetryUtility.sendTelemetryEvent("file-delete-user-from-all-collections", Map.of(
@@ -787,23 +818,112 @@ public class FileService {
         }
     }// Integration function end: Auth
 
-    private Cipher getCipher(int mode, Metadata metadata) throws Exception {
-        return getCipher(mode, Base64.getDecoder().decode(metadata.getIv()), 0);
+    private void deleteCollectionAndFiles(Collection collection) {
+        LOGGER.debug("Queueing all files in collection for deletion");
+        for(Metadata metadata : collection.getMetadataList()) {
+            FileDeletion fileDeletion = fileDeletionRepository.save(new FileDeletion(
+                    collection.getId(),
+                    metadata.getFileName(),
+                    metadata.getFileUUID()
+            ));
+            applicationEventPublisher.publishEvent(fileDeletion);
+        }
+
+        LOGGER.debug("Metadata queued for deletion, deleting collection");
+        collectionRepository.delete(collection);
     }
 
-    private Cipher getCipher(int mode, byte[] iv, long offset) throws Exception {
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void deleteFileAfterCommit(FileDeletion fileDeletion) {
+        fileDeletionRepository.findById(fileDeletion.getId())
+                .ifPresent(this::deletePendingFile);
+    }
+
+    @Scheduled(fixedDelayString = "${file.deletion.retry.delay}")
+    @Transactional(readOnly = false)
+    public void reconcileFiles() {
+        LOGGER.debug("Attempting to reconcile files");
+
+        List<Metadata> metadataList = metadataRepository.findAll();
+        List<FileDeletion> fileDeletions = fileDeletionRepository.findAll();
+        Set<String> expectedFiles = new HashSet<>();
+
+        for(Metadata metadata : metadataList)
+            expectedFiles.add(metadata.getFileUUID());
+
+        for(FileDeletion fileDeletion : fileDeletions)
+            expectedFiles.add(fileDeletion.getFileUUID());
+
+        for(FileDeletion fileDeletion : fileDeletions)
+            deletePendingFile(fileDeletion);
+
+        try (var files = Files.list(uploadDir)) {
+            for(Path filePath : files.toList()) {
+                String fileName = filePath.getFileName().toString();
+
+                if(!Files.isRegularFile(filePath)
+                        || expectedFiles.contains(fileName)
+                        || Files.getLastModifiedTime(filePath).toMillis()
+                        > System.currentTimeMillis() - reconciliationMinAge)
+                    continue;
+
+                Files.deleteIfExists(filePath);
+                LOGGER.info("Orphaned file successfully deleted");
+            }
+        } catch(IOException ex) {
+            LOGGER.error("Failed to reconcile orphaned files: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
+        }
+
+        for(Metadata metadata : metadataList) {
+            if(!Files.exists(uploadDir.resolve(metadata.getFileUUID())))
+                LOGGER.error("Metadata exists without a physical file: " + metadata.getFileUUID());
+        }
+    }
+
+    private void deletePendingFile(FileDeletion fileDeletion) {
+        try {
+            Files.deleteIfExists(uploadDir.resolve(fileDeletion.getFileUUID()));
+            fileDeletionRepository.delete(fileDeletion);
+            LOGGER.info("File successfully deleted");
+        } catch(IOException ex) {
+            LOGGER.error("Failed to delete file: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
+        }
+    }
+
+    private Cipher getCipher(int mode, Metadata metadata, long chunkIndex) throws Exception {
+        if(!ENCRYPTION_VERSION.equals(metadata.getEncryptionVersion()))
+            throw new RuntimeException("Unsupported file encryption version");
+
+        return getCipher(
+                mode,
+                Base64.getDecoder().decode(metadata.getIv()),
+                metadata.getFileUUID(),
+                metadata.getFileSize(),
+                chunkIndex
+        );
+    }
+
+    private Cipher getCipher(int mode, byte[] iv, String fileUUID, long fileSize, long chunkIndex) throws Exception {
         if (encryptionKey == null || encryptionKey.length() != 32) {
             throw new RuntimeException("Invalid ENCRYPTION_KEY (must be 32 characters for AES-256)");
         }
 
+        if (iv.length != GCM_IV_SIZE) {
+            throw new RuntimeException("Invalid file encryption IV");
+        }
+
         SecretKey secretKey = new SecretKeySpec(encryptionKey.getBytes(), "AES");
-        Cipher cipher = Cipher.getInstance("AES/CTR/NoPadding");
-        cipher.init(mode, secretKey, new IvParameterSpec(buildCounterIv(iv, offset / AES_BLOCK_SIZE)));
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(mode, secretKey, new GCMParameterSpec(128, buildChunkIv(iv, chunkIndex)));
+        cipher.updateAAD(getAuthenticatedData(fileUUID, fileSize, chunkIndex));
         return cipher;
     }
 
     private byte[] generateIv() {
-        byte[] iv = new byte[AES_BLOCK_SIZE];
+        byte[] iv = new byte[GCM_IV_SIZE];
         new SecureRandom().nextBytes(iv);
         return iv;
     }
@@ -847,41 +967,63 @@ public class FileService {
     }
 
     private byte[] decryptRegion(Path filePath, Metadata metadata, long start, long count) throws Exception {
-        long blockStart = (start / AES_BLOCK_SIZE) * AES_BLOCK_SIZE;
-        int offsetWithinBlock = (int) (start - blockStart);
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        long firstChunk = start / STREAM_CHUNK_SIZE;
+        long lastChunk = (start + count - 1) / STREAM_CHUNK_SIZE;
 
-        try (RandomAccessFile randomAccessFile = new RandomAccessFile(filePath.toFile(), "r")) {
-            randomAccessFile.seek(blockStart);
+        for(long chunkIndex = firstChunk; chunkIndex <= lastChunk; chunkIndex++) {
+            byte[] decryptedChunk = decryptChunk(filePath, metadata, chunkIndex);
+            long chunkStart = chunkIndex * STREAM_CHUNK_SIZE;
+            int startIndex = (int) Math.max(0, start - chunkStart);
+            int endIndex = (int) Math.min(decryptedChunk.length, start + count - chunkStart);
 
-            int bytesToRead = (int) Math.min(Integer.MAX_VALUE, count + offsetWithinBlock);
-            byte[] encryptedBytes = new byte[bytesToRead];
-            int bytesRead = randomAccessFile.read(encryptedBytes);
+            outputStream.write(decryptedChunk, startIndex, endIndex - startIndex);
+        }
 
-            if (bytesRead < 0) {
-                return new byte[0];
-            }
+        return outputStream.toByteArray();
+    }
 
-            if (bytesRead < encryptedBytes.length) {
-                encryptedBytes = Arrays.copyOf(encryptedBytes, bytesRead);
-            }
+    private byte[] encryptChunk(byte[] bytes, int bytesRead, byte[] iv, String fileUUID, long fileSize, long chunkIndex) throws Exception {
+        return getCipher(Cipher.ENCRYPT_MODE, iv, fileUUID, fileSize, chunkIndex)
+                .doFinal(bytes, 0, bytesRead);
+    }
 
-            byte[] decryptedBytes = getCipher(Cipher.DECRYPT_MODE, Base64.getDecoder().decode(metadata.getIv()), blockStart)
-                    .doFinal(encryptedBytes);
+    private void writeDecryptedFile(Path filePath, Metadata metadata, OutputStream outputStream) throws Exception {
+        long chunkCount = (metadata.getFileSize() + STREAM_CHUNK_SIZE - 1) / STREAM_CHUNK_SIZE;
 
-            return Arrays.copyOfRange(decryptedBytes, offsetWithinBlock, Math.min(decryptedBytes.length, offsetWithinBlock + (int) count));
+        for(long chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
+            outputStream.write(decryptChunk(filePath, metadata, chunkIndex));
         }
     }
 
-    private byte[] buildCounterIv(byte[] baseIv, long blockOffset) {
-        byte[] counterIv = Arrays.copyOf(baseIv, baseIv.length);
+    private byte[] decryptChunk(Path filePath, Metadata metadata, long chunkIndex) throws Exception {
+        long chunkStart = chunkIndex * STREAM_CHUNK_SIZE;
+        int plaintextLength = (int) Math.min(STREAM_CHUNK_SIZE, metadata.getFileSize() - chunkStart);
+        byte[] encryptedChunk = new byte[plaintextLength + GCM_TAG_SIZE];
 
-        for (int i = counterIv.length - 1; i >= 0 && blockOffset > 0; i--) {
-            long sum = (counterIv[i] & 0xFFL) + (blockOffset & 0xFFL);
-            counterIv[i] = (byte) sum;
-            blockOffset = (blockOffset >>> 8) + (sum >>> 8);
+        try (RandomAccessFile randomAccessFile = new RandomAccessFile(filePath.toFile(), "r")) {
+            randomAccessFile.seek(chunkIndex * (STREAM_CHUNK_SIZE + GCM_TAG_SIZE));
+            randomAccessFile.readFully(encryptedChunk);
         }
 
-        return counterIv;
+        return getCipher(Cipher.DECRYPT_MODE, metadata, chunkIndex).doFinal(encryptedChunk);
+    }
+
+    private byte[] getAuthenticatedData(String fileUUID, long fileSize, long chunkIndex) {
+        return (ENCRYPTION_VERSION + ":" + fileUUID + ":" + fileSize + ":" + chunkIndex)
+                .getBytes(StandardCharsets.UTF_8);
+    }
+
+    private byte[] buildChunkIv(byte[] baseIv, long chunkIndex) {
+        byte[] chunkIv = Arrays.copyOf(baseIv, baseIv.length);
+
+        for (int i = chunkIv.length - 1; i >= 0 && chunkIndex > 0; i--) {
+            long sum = (chunkIv[i] & 0xFFL) + (chunkIndex & 0xFFL);
+            chunkIv[i] = (byte) sum;
+            chunkIndex = (chunkIndex >>> 8) + (sum >>> 8);
+        }
+
+        return chunkIv;
     }
 
     private record RegionRequest(long start, long end, long count, boolean isPartial) {
