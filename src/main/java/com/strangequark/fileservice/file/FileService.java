@@ -311,7 +311,16 @@ public class FileService {
 
             Path filePath = uploadDir.resolve(metadata.getFileUUID());
             long fileSize = metadata.getFileSize();
-            RegionRequest regionRequest = resolveRegionRequest(rangeHeader, fileSize);
+            RegionRequest regionRequest;
+            try {
+                regionRequest = resolveRegionRequest(rangeHeader, fileSize);
+            } catch(IllegalArgumentException ex) {
+                LOGGER.info("Invalid range requested");
+                return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                        .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                        .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileSize)
+                        .body(new byte[0]);
+            }
             byte[] decryptedChunk = decryptRegion(filePath, metadata, regionRequest.start(), regionRequest.count());
             // Integration function start: Telemetry
             telemetryUtility.sendTelemetryEvent("file-stream", Map.of(
@@ -947,36 +956,40 @@ public class FileService {
     }
 
     private RegionRequest resolveRegionRequest(String rangeHeader, long fileSize) {
+        if(fileSize == 0) {
+            if(rangeHeader == null || rangeHeader.isBlank())
+                return new RegionRequest(0, -1, 0, false);
+
+            throw new IllegalArgumentException("Invalid range requested");
+        }
+
+        boolean hasRange = rangeHeader != null && !rangeHeader.isBlank();
         long start = 0;
         long end = Math.min(fileSize - 1, STREAM_CHUNK_SIZE - 1);
 
-        if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
-            String[] ranges = rangeHeader.substring(6).split("-", 2);
+        if(hasRange) {
+            List<HttpRange> ranges = HttpRange.parseRanges(rangeHeader);
 
-            if (!ranges[0].isBlank()) {
-                start = Long.parseLong(ranges[0]);
-                end = Math.min(fileSize - 1, start + STREAM_CHUNK_SIZE - 1);
-            }
+            if(ranges.size() != 1)
+                throw new IllegalArgumentException("Invalid range requested");
 
-            if (ranges.length > 1 && !ranges[1].isBlank()) {
-                end = Math.min(Long.parseLong(ranges[1]), Math.min(fileSize - 1, start + STREAM_CHUNK_SIZE - 1));
-            } else if (ranges[0].isBlank()) {
-                long suffixLength = Math.min(Long.parseLong(ranges[1]), fileSize);
-                start = fileSize - suffixLength;
-                end = fileSize - 1;
-            }
-        } else if (fileSize <= STREAM_CHUNK_SIZE) {
-            end = fileSize - 1;
+            HttpRange range = ranges.getFirst();
+            start = range.getRangeStart(fileSize);
+            end = Math.min(range.getRangeEnd(fileSize), start + STREAM_CHUNK_SIZE - 1);
         }
 
         if (start < 0 || end < start || start >= fileSize) {
             throw new IllegalArgumentException("Invalid range requested");
         }
 
-        return new RegionRequest(start, end, end - start + 1, start > 0 || end < fileSize - 1);
+        return new RegionRequest(start, end, end - start + 1,
+                hasRange || start > 0 || end < fileSize - 1);
     }
 
     private byte[] decryptRegion(Path filePath, Metadata metadata, long start, long count) throws Exception {
+        if(count == 0)
+            return new byte[0];
+
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         long firstChunk = start / STREAM_CHUNK_SIZE;
         long lastChunk = (start + count - 1) / STREAM_CHUNK_SIZE;

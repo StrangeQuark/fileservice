@@ -8,6 +8,7 @@ import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.response.UploadResponse;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
@@ -208,6 +209,51 @@ public class FileServiceTest extends BaseServiceTest {
 
         Assertions.assertEquals(200, response.getStatusCode().value());
         Assertions.assertEquals("Test file data", new String((byte[]) response.getBody(), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void streamFileReturns416ForInvalidRangesTest() {
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+
+        for(String range : List.of("bytes=-", "bytes=999-", "bytes=10-9", "bytes=0-1,4-5", "invalid")) {
+            ResponseEntity<?> response = fileService.streamFile(collectionName, fileName, range);
+
+            Assertions.assertEquals(416, response.getStatusCode().value());
+            Assertions.assertEquals("bytes */" + metadata.getFileSize(),
+                    response.getHeaders().getFirst(HttpHeaders.CONTENT_RANGE));
+        }
+    }
+
+    @Test
+    void streamEmptyFileTest() throws Exception {
+        String emptyFileName = "emptyFile.txt";
+
+        try {
+            ResponseEntity<?> uploadResponse = fileService.uploadFile(
+                    new MockMultipartFile("emptyFile", emptyFileName, "text/plain", new byte[0]),
+                    collectionName
+            );
+
+            Assertions.assertEquals(200, uploadResponse.getStatusCode().value());
+
+            ResponseEntity<?> response = fileService.streamFile(collectionName, emptyFileName, "");
+            Assertions.assertEquals(200, response.getStatusCode().value());
+            Assertions.assertEquals(0, ((byte[]) response.getBody()).length);
+
+            response = fileService.streamFile(collectionName, emptyFileName, "bytes=0-");
+            Assertions.assertEquals(416, response.getStatusCode().value());
+            Assertions.assertEquals("bytes */0",
+                    response.getHeaders().getFirst(HttpHeaders.CONTENT_RANGE));
+        } finally {
+            Metadata metadata = metadataRepository
+                    .findByCollectionIdAndFileName(collection.getId(), emptyFileName)
+                    .orElse(null);
+
+            if(metadata != null) {
+                Files.deleteIfExists(uploadDir.resolve(metadata.getFileUUID()));
+                metadataRepository.delete(metadata);
+            }
+        }
     }
 
     @Test
