@@ -8,11 +8,13 @@ import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.response.UploadResponse;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -21,9 +23,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.util.ArrayList;
 import java.util.Arrays;// Integration line: Auth
 import java.util.List;
 import java.util.UUID;// Integration line: Auth
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import static org.mockito.Mockito.when;// Integration line: Auth
 
@@ -118,12 +123,82 @@ public class FileServiceTest extends BaseServiceTest {
     }
 
     @Test
-    void downloadAllFilesTest() {
+    void downloadAllFilesTest() throws Exception {
         LOGGER.info("Begin downloadAllFilesTest");
+
+        ResponseEntity<StreamingResponseBody> response = fileService.downloadAllFiles(collectionName);
+
+        Assertions.assertEquals(200, response.getStatusCode().value());
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        response.getBody().writeTo(outputStream);
+
+        try(ZipInputStream zipInputStream = new ZipInputStream(
+                new ByteArrayInputStream(outputStream.toByteArray())
+        )) {
+            ZipEntry entry = zipInputStream.getNextEntry();
+
+            Assertions.assertNotNull(entry);
+            Assertions.assertEquals(fileName, entry.getName());
+            Assertions.assertEquals("Test file data",
+                    new String(zipInputStream.readAllBytes(), StandardCharsets.UTF_8));
+            Assertions.assertNull(zipInputStream.getNextEntry());
+        }
+    }
+
+    @Test
+    void downloadAllFilesRejectsUnsafeFileNameTest() {
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+        metadata.setFileName("../test.txt");
+        metadataRepository.save(metadata);
 
         ResponseEntity<?> response = fileService.downloadAllFiles(collectionName);
 
-        Assertions.assertEquals(200, response.getStatusCode().value());
+        Assertions.assertEquals(500, response.getStatusCode().value());
+    }
+
+    @Test
+    void downloadAllFilesHandlesMatchingFileNamesTest() throws Exception {
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+        metadata.setFileName("folder-one/file.txt");
+        metadataRepository.save(metadata);
+
+        metadataRepository.save(new Metadata(
+                collection,
+                "folder-two/file.txt",
+                metadata.getFileUUID(),
+                metadata.getFileType(),
+                metadata.getFileSize(),
+                metadata.getIv(),
+                metadata.getEncryptionVersion()
+        ));
+
+        ResponseEntity<StreamingResponseBody> response = fileService.downloadAllFiles(collectionName);
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        response.getBody().writeTo(outputStream);
+
+        List<String> fileNames = new ArrayList<>();
+        try(ZipInputStream zipInputStream = new ZipInputStream(
+                new ByteArrayInputStream(outputStream.toByteArray())
+        )) {
+            ZipEntry entry;
+            while((entry = zipInputStream.getNextEntry()) != null)
+                fileNames.add(entry.getName());
+        }
+
+        Assertions.assertTrue(fileNames.contains("file.txt"));
+        Assertions.assertTrue(fileNames.contains("file (1).txt"));
+    }
+
+    @Test
+    void downloadAllFilesFailsWhenFileCannotBeReadTest() throws Exception {
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+        ResponseEntity<StreamingResponseBody> response = fileService.downloadAllFiles(collectionName);
+
+        Files.delete(uploadDir.resolve(metadata.getFileUUID()));
+
+        Assertions.assertThrows(IOException.class,
+                () -> response.getBody().writeTo(new ByteArrayOutputStream()));
     }
 
     @Test
@@ -134,6 +209,51 @@ public class FileServiceTest extends BaseServiceTest {
 
         Assertions.assertEquals(200, response.getStatusCode().value());
         Assertions.assertEquals("Test file data", new String((byte[]) response.getBody(), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void streamFileReturns416ForInvalidRangesTest() {
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+
+        for(String range : List.of("bytes=-", "bytes=999-", "bytes=10-9", "bytes=0-1,4-5", "invalid")) {
+            ResponseEntity<?> response = fileService.streamFile(collectionName, fileName, range);
+
+            Assertions.assertEquals(416, response.getStatusCode().value());
+            Assertions.assertEquals("bytes */" + metadata.getFileSize(),
+                    response.getHeaders().getFirst(HttpHeaders.CONTENT_RANGE));
+        }
+    }
+
+    @Test
+    void streamEmptyFileTest() throws Exception {
+        String emptyFileName = "emptyFile.txt";
+
+        try {
+            ResponseEntity<?> uploadResponse = fileService.uploadFile(
+                    new MockMultipartFile("emptyFile", emptyFileName, "text/plain", new byte[0]),
+                    collectionName
+            );
+
+            Assertions.assertEquals(200, uploadResponse.getStatusCode().value());
+
+            ResponseEntity<?> response = fileService.streamFile(collectionName, emptyFileName, "");
+            Assertions.assertEquals(200, response.getStatusCode().value());
+            Assertions.assertEquals(0, ((byte[]) response.getBody()).length);
+
+            response = fileService.streamFile(collectionName, emptyFileName, "bytes=0-");
+            Assertions.assertEquals(416, response.getStatusCode().value());
+            Assertions.assertEquals("bytes */0",
+                    response.getHeaders().getFirst(HttpHeaders.CONTENT_RANGE));
+        } finally {
+            Metadata metadata = metadataRepository
+                    .findByCollectionIdAndFileName(collection.getId(), emptyFileName)
+                    .orElse(null);
+
+            if(metadata != null) {
+                Files.deleteIfExists(uploadDir.resolve(metadata.getFileUUID()));
+                metadataRepository.delete(metadata);
+            }
+        }
     }
 
     @Test
@@ -419,5 +539,48 @@ public class FileServiceTest extends BaseServiceTest {
         Assertions.assertEquals(200, response.getStatusCode().value());
         Assertions.assertTrue(collectionRepository.findByName(collectionName).isEmpty());
         Assertions.assertFalse(Files.exists(uploadDir.resolve(metadata.getFileUUID())));
+    }
+
+    @Test
+    void deleteUserFromAllCollectionsDoesNotPartiallyDeleteTest() {
+        UUID targetUserId = UUID.randomUUID();
+        Collection protectedCollection = new Collection("protectedCollection_" + UUID.randomUUID());
+        collectionRepository.save(protectedCollection);
+
+        collectionUserRepository.save(new CollectionUser(
+                collection,
+                targetUserId,
+                CollectionUserRole.READ_WRITE
+        ));
+        collectionUserRepository.save(new CollectionUser(
+                protectedCollection,
+                testUserId,
+                CollectionUserRole.MANAGER
+        ));
+        collectionUserRepository.save(new CollectionUser(
+                protectedCollection,
+                targetUserId,
+                CollectionUserRole.OWNER
+        ));
+        collectionUserRepository.save(new CollectionUser(
+                protectedCollection,
+                UUID.randomUUID(),
+                CollectionUserRole.READ_WRITE
+        ));
+
+        when(authUtility.getUserId("testUser")).thenReturn(targetUserId.toString());
+
+        ResponseEntity<?> response = fileService.deleteUserFromAllCollections(
+                new CollectionUserRequest(collectionName, "testUser", CollectionUserRole.READ_WRITE)
+        );
+
+        Assertions.assertEquals(400, response.getStatusCode().value());
+        Assertions.assertTrue(collectionUserRepository
+                .findByUserIdAndCollectionId(targetUserId, collection.getId())
+                .isPresent());
+        Assertions.assertTrue(collectionUserRepository
+                .findByUserIdAndCollectionId(targetUserId, protectedCollection.getId())
+                .isPresent());
+        Assertions.assertTrue(collectionRepository.findByName(protectedCollection.getName()).isPresent());
     }// Integration function end: Auth
 }

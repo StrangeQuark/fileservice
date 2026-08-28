@@ -248,13 +248,19 @@ public class FileService {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             }
 
+            List<String> zipEntryNames = new ArrayList<>();
+            Set<String> usedZipEntryNames = new HashSet<>();
+
+            for(Metadata metadataItem : metadata)
+                zipEntryNames.add(getZipEntryName(metadataItem.getFileName(), usedZipEntryNames));
+
             StreamingResponseBody stream = outputStream -> {
-                try {
-                    ZipOutputStream zip = new ZipOutputStream(outputStream);
-                    for (Metadata metadataItem : metadata) {
+                try(ZipOutputStream zip = new ZipOutputStream(outputStream)) {
+                    for (int i = 0; i < metadata.size(); i++) {
+                        Metadata metadataItem = metadata.get(i);
                         Path filePath = uploadDir.resolve(metadataItem.getFileUUID());
 
-                        ZipEntry entry = new ZipEntry(metadataItem.getFileName());
+                        ZipEntry entry = new ZipEntry(zipEntryNames.get(i));
                         entry.setSize(metadataItem.getFileSize());
                         zip.putNextEntry(entry);
 
@@ -262,11 +268,10 @@ public class FileService {
 
                         zip.closeEntry();
                     }
-
-                    zip.finish();
                 } catch (Exception ex) {
                     LOGGER.error("Error when adding file to zip: " + ex.getMessage());
                     LOGGER.debug("Stack trace: ", ex);
+                    throw new IOException("File download failed", ex);
                 }
             };
             // Integration function start: Telemetry
@@ -306,7 +311,16 @@ public class FileService {
 
             Path filePath = uploadDir.resolve(metadata.getFileUUID());
             long fileSize = metadata.getFileSize();
-            RegionRequest regionRequest = resolveRegionRequest(rangeHeader, fileSize);
+            RegionRequest regionRequest;
+            try {
+                regionRequest = resolveRegionRequest(rangeHeader, fileSize);
+            } catch(IllegalArgumentException ex) {
+                LOGGER.info("Invalid range requested");
+                return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                        .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                        .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileSize)
+                        .body(new byte[0]);
+            }
             byte[] decryptedChunk = decryptRegion(filePath, metadata, regionRequest.start(), regionRequest.count());
             // Integration function start: Telemetry
             telemetryUtility.sendTelemetryEvent("file-stream", Map.of(
@@ -477,7 +491,7 @@ public class FileService {
         LOGGER.info("Attempting to delete collection and all associated files");
 
         try {
-            Collection collection = collectionRepository.findByName(collectionName)
+            Collection collection = collectionRepository.findByNameForUpdate(collectionName)
                     .orElseThrow(() -> new RuntimeException("Unable to locate collection when attempting to delete"));
 
             // Integration function start: Auth
@@ -501,6 +515,7 @@ public class FileService {
             LOGGER.info("Collection successfully deleted");
             return ResponseEntity.ok("Collection and children files successfully deleted");
         } catch (RuntimeException ex) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             LOGGER.error("Failed to delete collection: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
@@ -559,7 +574,7 @@ public class FileService {
         LOGGER.info("Attempting to update user's role");
 
         try {
-            Collection collection = collectionRepository.findByName(collectionUserRequest.getCollectionName())
+            Collection collection = collectionRepository.findByNameForUpdate(collectionUserRequest.getCollectionName())
                     .orElseThrow(() -> new RuntimeException("Collection with this name does not exist"));
 
             CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
@@ -616,6 +631,7 @@ public class FileService {
             LOGGER.info("User role successfully updated");
             return ResponseEntity.ok("User role successfully updated");
         } catch (Exception ex) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             LOGGER.error("Failed to update user role: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
@@ -627,7 +643,7 @@ public class FileService {
         LOGGER.info("Attempting to add user to collection");
 
         try {
-            Collection collection = collectionRepository.findByName(collectionUserRequest.getCollectionName())
+            Collection collection = collectionRepository.findByNameForUpdate(collectionUserRequest.getCollectionName())
                     .orElseThrow(() -> new RuntimeException("Collection with this name does not exist"));
 
             CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
@@ -664,6 +680,7 @@ public class FileService {
             LOGGER.info("User successfully added to collection");
             return ResponseEntity.ok("User successfully added to collection");
         } catch(RuntimeException ex) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             LOGGER.error("Failed to add user to collection: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
@@ -675,7 +692,7 @@ public class FileService {
         LOGGER.info("Attempting to delete user from collection");
 
         try {
-            Collection collection = collectionRepository.findByName(collectionUserRequest.getCollectionName())
+            Collection collection = collectionRepository.findByNameForUpdate(collectionUserRequest.getCollectionName())
                     .orElseThrow(() -> new RuntimeException("Collection with this name does not exist"));
 
             CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
@@ -721,6 +738,7 @@ public class FileService {
             LOGGER.info("User successfully deleted from collection");
             return ResponseEntity.ok("User successfully deleted from collection");
         } catch(RuntimeException ex) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             LOGGER.error("Failed to delete user from collection: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
@@ -739,7 +757,7 @@ public class FileService {
             }
             UUID userId = UUID.fromString(userIdStr);
 
-            List<Collection> collections = collectionUserRepository.findCollectionsByUserId(userId);
+            List<Collection> collections = collectionUserRepository.findCollectionsByUserIdForUpdate(userId);
 
             List<Map<String, String>> errors = new ArrayList<>();
             List<Collection> collectionsToDelete = new ArrayList<>();
@@ -812,6 +830,7 @@ public class FileService {
             LOGGER.info("User successfully deleted from all collections");
             return ResponseEntity.ok("User successfully deleted from all collections");
         } catch(RuntimeException ex) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             LOGGER.error("Failed to delete user from all collections: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
@@ -937,36 +956,40 @@ public class FileService {
     }
 
     private RegionRequest resolveRegionRequest(String rangeHeader, long fileSize) {
+        if(fileSize == 0) {
+            if(rangeHeader == null || rangeHeader.isBlank())
+                return new RegionRequest(0, -1, 0, false);
+
+            throw new IllegalArgumentException("Invalid range requested");
+        }
+
+        boolean hasRange = rangeHeader != null && !rangeHeader.isBlank();
         long start = 0;
         long end = Math.min(fileSize - 1, STREAM_CHUNK_SIZE - 1);
 
-        if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
-            String[] ranges = rangeHeader.substring(6).split("-", 2);
+        if(hasRange) {
+            List<HttpRange> ranges = HttpRange.parseRanges(rangeHeader);
 
-            if (!ranges[0].isBlank()) {
-                start = Long.parseLong(ranges[0]);
-                end = Math.min(fileSize - 1, start + STREAM_CHUNK_SIZE - 1);
-            }
+            if(ranges.size() != 1)
+                throw new IllegalArgumentException("Invalid range requested");
 
-            if (ranges.length > 1 && !ranges[1].isBlank()) {
-                end = Math.min(Long.parseLong(ranges[1]), Math.min(fileSize - 1, start + STREAM_CHUNK_SIZE - 1));
-            } else if (ranges[0].isBlank()) {
-                long suffixLength = Math.min(Long.parseLong(ranges[1]), fileSize);
-                start = fileSize - suffixLength;
-                end = fileSize - 1;
-            }
-        } else if (fileSize <= STREAM_CHUNK_SIZE) {
-            end = fileSize - 1;
+            HttpRange range = ranges.getFirst();
+            start = range.getRangeStart(fileSize);
+            end = Math.min(range.getRangeEnd(fileSize), start + STREAM_CHUNK_SIZE - 1);
         }
 
         if (start < 0 || end < start || start >= fileSize) {
             throw new IllegalArgumentException("Invalid range requested");
         }
 
-        return new RegionRequest(start, end, end - start + 1, start > 0 || end < fileSize - 1);
+        return new RegionRequest(start, end, end - start + 1,
+                hasRange || start > 0 || end < fileSize - 1);
     }
 
     private byte[] decryptRegion(Path filePath, Metadata metadata, long start, long count) throws Exception {
+        if(count == 0)
+            return new byte[0];
+
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         long firstChunk = start / STREAM_CHUNK_SIZE;
         long lastChunk = (start + count - 1) / STREAM_CHUNK_SIZE;
@@ -988,25 +1011,64 @@ public class FileService {
                 .doFinal(bytes, 0, bytesRead);
     }
 
+    private String getZipEntryName(String fileName, Set<String> usedZipEntryNames) {
+        String normalizedName = fileName.replace("\\", "/");
+
+        if(normalizedName.startsWith("/")
+                || normalizedName.matches("^[A-Za-z]:.*")
+                || normalizedName.contains("../")
+                || normalizedName.contains("\0"))
+            throw new RuntimeException("Invalid file name for ZIP download");
+
+        String zipEntryName = normalizedName.substring(normalizedName.lastIndexOf("/") + 1);
+
+        if(zipEntryName.isBlank() || zipEntryName.equals(".") || zipEntryName.equals(".."))
+            throw new RuntimeException("Invalid file name for ZIP download");
+
+        String name = zipEntryName;
+        String extension = "";
+        int extensionIndex = zipEntryName.lastIndexOf(".");
+
+        if(extensionIndex > 0) {
+            name = zipEntryName.substring(0, extensionIndex);
+            extension = zipEntryName.substring(extensionIndex);
+        }
+
+        int index = 1;
+        while(usedZipEntryNames.contains(zipEntryName)) {
+            zipEntryName = name + " (" + index + ")" + extension;
+            index++;
+        }
+
+        usedZipEntryNames.add(zipEntryName);
+        return zipEntryName;
+    }
+
     private void writeDecryptedFile(Path filePath, Metadata metadata, OutputStream outputStream) throws Exception {
         long chunkCount = (metadata.getFileSize() + STREAM_CHUNK_SIZE - 1) / STREAM_CHUNK_SIZE;
 
-        for(long chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
-            outputStream.write(decryptChunk(filePath, metadata, chunkIndex));
+        try(RandomAccessFile randomAccessFile = new RandomAccessFile(filePath.toFile(), "r")) {
+            for(long chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
+                outputStream.write(decryptChunk(randomAccessFile, metadata, chunkIndex));
+            }
         }
     }
 
-    private byte[] decryptChunk(Path filePath, Metadata metadata, long chunkIndex) throws Exception {
+    private byte[] decryptChunk(RandomAccessFile randomAccessFile, Metadata metadata, long chunkIndex) throws Exception {
         long chunkStart = chunkIndex * STREAM_CHUNK_SIZE;
         int plaintextLength = (int) Math.min(STREAM_CHUNK_SIZE, metadata.getFileSize() - chunkStart);
         byte[] encryptedChunk = new byte[plaintextLength + GCM_TAG_SIZE];
 
-        try (RandomAccessFile randomAccessFile = new RandomAccessFile(filePath.toFile(), "r")) {
-            randomAccessFile.seek(chunkIndex * (STREAM_CHUNK_SIZE + GCM_TAG_SIZE));
-            randomAccessFile.readFully(encryptedChunk);
-        }
+        randomAccessFile.seek(chunkIndex * (STREAM_CHUNK_SIZE + GCM_TAG_SIZE));
+        randomAccessFile.readFully(encryptedChunk);
 
         return getCipher(Cipher.DECRYPT_MODE, metadata, chunkIndex).doFinal(encryptedChunk);
+    }
+
+    private byte[] decryptChunk(Path filePath, Metadata metadata, long chunkIndex) throws Exception {
+        try (RandomAccessFile randomAccessFile = new RandomAccessFile(filePath.toFile(), "r")) {
+            return decryptChunk(randomAccessFile, metadata, chunkIndex);
+        }
     }
 
     private byte[] getAuthenticatedData(String fileUUID, long fileSize, long chunkIndex) {
