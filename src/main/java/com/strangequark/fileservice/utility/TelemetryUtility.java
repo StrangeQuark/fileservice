@@ -2,6 +2,7 @@
 
 package com.strangequark.fileservice.utility;
 
+import jakarta.annotation.PreDestroy;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.internals.RecordHeader;
@@ -16,6 +17,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.Executor;
@@ -58,7 +60,12 @@ public class TelemetryUtility {
                     ,List.of(new RecordHeader("Authorization", accessToken.getBytes())) // Integration line: Auth
             );
 
-            getProducer().send(record);
+            getProducer().send(record, (recordMetadata, exception) -> {
+                if(exception != null) {
+                    LOGGER.error("Failed to send telemetry event: " + exception.getMessage());
+                    LOGGER.debug("Stack trace: ", exception);
+                }
+            });
             LOGGER.debug("Telemetry event successfully sent");
         } catch (Exception ex) {
             LOGGER.error("Failed to react Telemetry Kafka service: " + ex.getMessage());
@@ -72,9 +79,18 @@ public class TelemetryUtility {
             props.put("bootstrap.servers", "telemetry-kafka:9093");
             props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
             props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+            props.put("max.block.ms", "5000");
+            props.put("request.timeout.ms", "5000");
+            props.put("delivery.timeout.ms", "10000");
             producer = new KafkaProducer<>(props);
         }
         return producer;
+    }
+
+    @PreDestroy
+    public void closeProducer() {
+        if(producer != null)
+            producer.close(Duration.ofSeconds(5));
     }
 
     @Configuration
@@ -87,6 +103,9 @@ public class TelemetryUtility {
             executor.setMaxPoolSize(1);
             executor.setQueueCapacity(50);
             executor.setThreadNamePrefix("Telemetry-");
+            executor.setRejectedExecutionHandler((runnable, threadPoolExecutor) ->
+                    LOGGER.warn("Telemetry event dropped because telemetry queue is full")
+            );
             executor.initialize();
             return executor;
         }

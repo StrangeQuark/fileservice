@@ -5,6 +5,7 @@ package com.strangequark.fileservice.utility;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
@@ -20,6 +21,9 @@ public class AuthUtility {
     @Value("${SERVICE_SECRET_FILE}")
     private String SERVICE_SECRET_FILE;
 
+    @Autowired
+    private RestTemplate restTemplate;
+
     public String authenticateServiceAccount() {
         try {
             LOGGER.debug("Attempting to authenticate service account");
@@ -33,7 +37,7 @@ public class AuthUtility {
 
             HttpEntity<Map<String, String>> requestEntity = new HttpEntity<>(requestBody, headers);
 
-            String response = new RestTemplate().postForObject(
+            String response = restTemplate.postForObject(
                     "http://auth-service:6001/api/auth/service-account/authenticate",
                     requestEntity,
                     String.class
@@ -65,7 +69,7 @@ public class AuthUtility {
 
             HttpEntity<Void> entity = new HttpEntity<>(headers);
 
-            ResponseEntity<String> responseEntity = new RestTemplate().exchange(
+            ResponseEntity<String> responseEntity = restTemplate.exchange(
                     "http://auth-service:6001/api/auth/user/get-user-id?username=" + username,
                     HttpMethod.GET,
                     entity,
