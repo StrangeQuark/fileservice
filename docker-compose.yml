@@ -7,6 +7,9 @@ services:
     ports:
       - "6010:6010"
     container_name: file-service
+    labels:
+      com.msinit.log: "true"
+      com.msinit.service-name: "fileservice"
     depends_on:
       - file-db
     volumes:
