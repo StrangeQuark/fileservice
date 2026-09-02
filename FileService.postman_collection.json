@@ -40,10 +40,10 @@
 						}
 					]
 				},
-				"method": "GET",
+				"method": "POST",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:6010/api/file/get-all/testCollection",
+					"raw": "http://localhost:6010/api/file/get-all",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -52,9 +52,17 @@
 					"path": [
 						"api",
 						"file",
-						"get-all",
-						"testCollection"
+						"get-all"
 					]
+				},
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"collectionName\": \"testCollection\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
 				}
 			},
 			"response": []
@@ -72,10 +80,10 @@
 						}
 					]
 				},
-				"method": "GET",
+				"method": "POST",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:6010/api/file/download/testCollection/test.txt",
+					"raw": "http://localhost:6010/api/file/download",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -84,10 +92,17 @@
 					"path": [
 						"api",
 						"file",
-						"download",
-						"testCollection",
-						"test.txt"
+						"download"
 					]
+				},
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"collectionName\": \"testCollection\",\n    \"fileName\": \"test.txt\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
 				}
 			},
 			"response": []
@@ -105,10 +120,10 @@
 						}
 					]
 				},
-				"method": "GET",
+				"method": "POST",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:6010/api/file/downloadAll/testCollection",
+					"raw": "http://localhost:6010/api/file/downloadAll",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -117,9 +132,17 @@
 					"path": [
 						"api",
 						"file",
-						"downloadAll",
-						"testCollection"
+						"downloadAll"
 					]
+				},
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"collectionName\": \"testCollection\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
 				}
 			},
 			"response": []
@@ -140,7 +163,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:6010/api/file/stream/testCollection/v1.webm",
+					"raw": "http://localhost:6010/api/file/stream?collectionName=testCollection&fileName=v1.webm",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -149,9 +172,17 @@
 					"path": [
 						"api",
 						"file",
-						"stream",
-						"testCollection",
-						"v1.webm"
+						"stream"
+					],
+					"query": [
+						{
+							"key": "collectionName",
+							"value": "testCollection"
+						},
+						{
+							"key": "fileName",
+							"value": "v1.webm"
+						}
 					]
 				}
 			},
@@ -179,11 +210,16 @@
 							"key": "file",
 							"type": "file",
 							"src": "/home/strangequark/Desktop/Game helpers/england2025.txt"
+						},
+						{
+							"key": "collectionName",
+							"value": "testCollection",
+							"type": "text"
 						}
 					]
 				},
 				"url": {
-					"raw": "http://localhost:6010/api/file/upload/testCollection",
+					"raw": "http://localhost:6010/api/file/upload",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -192,8 +228,7 @@
 					"path": [
 						"api",
 						"file",
-						"upload",
-						"testCollection"
+						"upload"
 					]
 				}
 			},
@@ -215,7 +250,7 @@
 				"method": "POST",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:6010/api/file/new-collection/testCollection",
+					"raw": "http://localhost:6010/api/file/new-collection",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -224,9 +259,17 @@
 					"path": [
 						"api",
 						"file",
-						"new-collection",
-						"testCollection"
+						"new-collection"
 					]
+				},
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"collectionName\": \"testCollection\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
 				}
 			},
 			"response": []
@@ -278,7 +321,7 @@
 				"method": "DELETE",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:6010/api/file/delete/testCollection/england2025.txt",
+					"raw": "http://localhost:6010/api/file/delete",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -287,10 +330,17 @@
 					"path": [
 						"api",
 						"file",
-						"delete",
-						"testCollection",
-						"england2025.txt"
+						"delete"
 					]
+				},
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"collectionName\": \"testCollection\",\n    \"fileName\": \"england2025.txt\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
 				}
 			},
 			"response": []
@@ -311,7 +361,7 @@
 				"method": "DELETE",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:6010/api/file/delete-collection/testCollection",
+					"raw": "http://localhost:6010/api/file/delete-collection",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -320,9 +370,17 @@
 					"path": [
 						"api",
 						"file",
-						"delete-collection",
-						"testCollection"
+						"delete-collection"
 					]
+				},
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"collectionName\": \"testCollection\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
 				}
 			},
 			"response": []
@@ -340,10 +398,10 @@
 						}
 					]
 				},
-				"method": "GET",
+				"method": "POST",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:6010/api/file/get-current-user-role/testCollection",
+					"raw": "http://localhost:6010/api/file/get-current-user-role",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -352,9 +410,17 @@
 					"path": [
 						"api",
 						"file",
-						"get-current-user-role",
-						"testCollection"
+						"get-current-user-role"
 					]
+				},
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"collectionName\": \"testCollection\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
 				}
 			},
 			"response": []
@@ -372,10 +438,10 @@
 						}
 					]
 				},
-				"method": "GET",
+				"method": "POST",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:6010/api/file/get-users-by-collection/testCollection",
+					"raw": "http://localhost:6010/api/file/get-users-by-collection",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -384,9 +450,17 @@
 					"path": [
 						"api",
 						"file",
-						"get-users-by-collection",
-						"testCollection"
+						"get-users-by-collection"
 					]
+				},
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"collectionName\": \"testCollection\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
 				}
 			},
 			"response": []

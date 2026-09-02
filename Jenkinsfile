@@ -12,8 +12,10 @@ pipeline {
             steps {
                 script {
                     def response = httpRequest(
-                        url: VAULT_URL + '/api/vault/cicd/fileservice/e3',
-                        httpMode: 'GET',
+                        url: VAULT_URL + '/api/vault/cicd',
+                        httpMode: 'POST',
+                        contentType: 'APPLICATION_JSON',
+                        requestBody: '{"serviceName":"fileservice","environmentName":"e3"}',
                         customHeaders: [
                             [name: 'X-CICD-TOKEN', value: CICD_TOKEN, maskValue: true]
                         ],
@@ -83,4 +85,3 @@ pipeline {
     }
     // Integration function end: Vault
 }
-

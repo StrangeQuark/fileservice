@@ -64,14 +64,18 @@ public class AuthUtility {
 
             String accessToken = authenticateServiceAccount();
 
+            Map<String, String> requestBody = new HashMap<>();
+            requestBody.put("username", username);
+
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(accessToken);
+            headers.setContentType(MediaType.APPLICATION_JSON);
 
-            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            HttpEntity<Map<String, String>> entity = new HttpEntity<>(requestBody, headers);
 
             ResponseEntity<String> responseEntity = restTemplate.exchange(
-                    "http://auth-service:6001/api/auth/user/get-user-id?username=" + username,
-                    HttpMethod.GET,
+                    "http://auth-service:6001/api/auth/user/get-user-id",
+                    HttpMethod.POST,
                     entity,
                     String.class
             );
