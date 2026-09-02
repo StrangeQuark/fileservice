@@ -15,34 +15,34 @@ public class FileController {
         this.fileService = fileService;
     }
 
-    @GetMapping("/get-all/{collectionName}")
-    public ResponseEntity<?> getAllFiles(@PathVariable String collectionName) {
-        return fileService.getAllFiles(collectionName);
+    @PostMapping("/get-all")
+    public ResponseEntity<?> getAllFiles(@RequestBody FileRequest fileRequest) {
+        return fileService.getAllFiles(fileRequest.getCollectionName());
     }
 
-    @GetMapping("/download/{collectionName}/{fileName}")
-    public ResponseEntity<StreamingResponseBody> downloadFile(@PathVariable String collectionName, @PathVariable String fileName) {
-        return fileService.downloadFile(collectionName, fileName);
+    @PostMapping("/download")
+    public ResponseEntity<StreamingResponseBody> downloadFile(@RequestBody FileRequest fileRequest) {
+        return fileService.downloadFile(fileRequest.getCollectionName(), fileRequest.getFileName());
     }
 
-    @GetMapping("/downloadAll/{collectionName}")
-    public ResponseEntity<StreamingResponseBody> downloadAllFiles(@PathVariable String collectionName) {
-        return fileService.downloadAllFiles(collectionName);
+    @PostMapping("/downloadAll")
+    public ResponseEntity<StreamingResponseBody> downloadAllFiles(@RequestBody FileRequest fileRequest) {
+        return fileService.downloadAllFiles(fileRequest.getCollectionName());
     }
 
-    @GetMapping("/stream/{collectionName}/{fileName}")
-    public ResponseEntity<byte[]> streamFile(@PathVariable String collectionName, @PathVariable String fileName, @RequestHeader(value = "Range", required = false) String rangeHeader) {
+    @GetMapping("/stream")
+    public ResponseEntity<byte[]> streamFile(@RequestParam String collectionName, @RequestParam String fileName, @RequestHeader(value = "Range", required = false) String rangeHeader) {
         return fileService.streamFile(collectionName, fileName, rangeHeader);
     }
 
-    @PostMapping("/upload/{collectionName}")
-    public ResponseEntity<?> uploadFile(@RequestParam("file") MultipartFile file, @PathVariable String collectionName) {
+    @PostMapping("/upload")
+    public ResponseEntity<?> uploadFile(@RequestParam("file") MultipartFile file, @RequestParam String collectionName) {
         return fileService.uploadFile(file, collectionName);
     }
 
-    @PostMapping("/new-collection/{collectionName}")
-    public ResponseEntity<?> createNewCollection(@PathVariable String collectionName) {
-        return fileService.createNewCollection(collectionName);
+    @PostMapping("/new-collection")
+    public ResponseEntity<?> createNewCollection(@RequestBody FileRequest fileRequest) {
+        return fileService.createNewCollection(fileRequest.getCollectionName());
     }
 
     @GetMapping("/get-all-collections")
@@ -50,24 +50,24 @@ public class FileController {
         return fileService.getAllCollections();
     }
 
-    @DeleteMapping("/delete/{collectionName}/{fileName}")
-    public ResponseEntity<?> deleteFile(@PathVariable String collectionName, @PathVariable String fileName) {
-        return fileService.deleteFile(collectionName, fileName);
+    @DeleteMapping("/delete")
+    public ResponseEntity<?> deleteFile(@RequestBody FileRequest fileRequest) {
+        return fileService.deleteFile(fileRequest.getCollectionName(), fileRequest.getFileName());
     }
 
-    @DeleteMapping("/delete-collection/{collectionName}")
-    public ResponseEntity<?> deleteCollection(@PathVariable String collectionName) {
-        return fileService.deleteCollection(collectionName);
+    @DeleteMapping("/delete-collection")
+    public ResponseEntity<?> deleteCollection(@RequestBody FileRequest fileRequest) {
+        return fileService.deleteCollection(fileRequest.getCollectionName());
     }
     // Integration function start: Auth
-    @GetMapping("/get-current-user-role/{collectionName}")
-    public ResponseEntity<?> getCurrentUserRole(@PathVariable String collectionName) {
-        return fileService.getCurrentUserRole(collectionName);
+    @PostMapping("/get-current-user-role")
+    public ResponseEntity<?> getCurrentUserRole(@RequestBody FileRequest fileRequest) {
+        return fileService.getCurrentUserRole(fileRequest.getCollectionName());
     }
 
-    @GetMapping("/get-users-by-collection/{collectionName}")
-    public ResponseEntity<?> getUsersByCollection(@PathVariable String collectionName) {
-        return fileService.getUsersByCollection(collectionName);
+    @PostMapping("/get-users-by-collection")
+    public ResponseEntity<?> getUsersByCollection(@RequestBody FileRequest fileRequest) {
+        return fileService.getUsersByCollection(fileRequest.getCollectionName());
     }
 
     @GetMapping("/get-all-roles")
