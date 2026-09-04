@@ -7,6 +7,7 @@ import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.util.List;
@@ -72,5 +73,21 @@ public class MetadataRepositoryTest {
         Assertions.assertEquals(2, metadata.size());
         Assertions.assertEquals("testFile.file", metadata.get(0).getFileName());
         Assertions.assertEquals("testFile2.file", metadata.get(1).getFileName());
+    }
+
+    @Test
+    void collectionAndFileNameAreUniqueTest() {
+        Assertions.assertThrows(DataIntegrityViolationException.class,
+                () -> metadataRepository.saveAndFlush(
+                        new Metadata(
+                                collection,
+                                "testFile.file",
+                                UUID.randomUUID() + ".file",
+                                "file",
+                                0L,
+                                "test-iv-3",
+                                "AES_GCM_V1"
+                        )
+                ));
     }
 }

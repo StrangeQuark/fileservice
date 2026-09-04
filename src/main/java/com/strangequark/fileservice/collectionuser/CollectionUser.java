@@ -10,7 +10,9 @@ import jakarta.persistence.*;
 import java.util.UUID;
 
 @Entity
-@Table(name = "collection_users")
+@Table(name = "collection_users", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"collection_id", "user_id"})
+})
 public class CollectionUser {
 
     public CollectionUser() {

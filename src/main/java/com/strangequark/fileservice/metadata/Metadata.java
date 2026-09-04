@@ -11,7 +11,9 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "metadata")
+@Table(name = "metadata", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"collection_id", "file_name"})
+})
 public class Metadata {
 
     public Metadata() {
