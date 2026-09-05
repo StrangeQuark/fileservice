@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.*;
 import org.springframework.http.MediaTypeFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -363,7 +364,7 @@ public class FileService {
                     .orElseThrow(() -> new RuntimeException("Collection not found"));
 
             if(metadataRepository.findByCollectionIdAndFileName(collection.getId(), file.getOriginalFilename()).isPresent())
-                throw new RuntimeException("File name already exists in collection");
+                return ResponseEntity.status(409).body(new ErrorResponse("File name already exists in collection"));
 
             // Integration function start: Auth
             CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
@@ -432,6 +433,11 @@ public class FileService {
                 Files.deleteIfExists(filePath);
                 throw ex;
             }
+        } catch(DataIntegrityViolationException ex) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            LOGGER.error("Failed to upload file: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
+            return ResponseEntity.status(409).body(new ErrorResponse("File name already exists in collection"));
         } catch (Exception ex) {
             TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             LOGGER.error("Failed to upload file: " + ex.getMessage());
@@ -446,7 +452,7 @@ public class FileService {
 
         try {
             if(collectionRepository.findByName(collectionName).isPresent())
-                throw new RuntimeException("Collection with this name already exists");
+                return ResponseEntity.status(409).body(new ErrorResponse("Collection with this name already exists"));
 
             Collection newCollection = new Collection(collectionName);
             newCollection.addUser(new CollectionUser(newCollection, UUID.fromString(jwtUtility.extractId()), CollectionUserRole.OWNER));// Integration line: Auth
@@ -663,9 +669,8 @@ public class FileService {
 
 
             // Avoid duplicate users
-            if (collectionUserRepository.findByUserIdAndCollectionId(userId, collection.getId()).isPresent()) {
-                throw new RuntimeException("User is already part of the collection.");
-            }
+            if (collectionUserRepository.findByUserIdAndCollectionId(userId, collection.getId()).isPresent())
+                return ResponseEntity.status(409).body(new ErrorResponse("User is already part of the collection."));
 
             collection.addUser(new CollectionUser(collection, userId, collectionUserRequest.getRole()));
             collectionRepository.save(collection);
