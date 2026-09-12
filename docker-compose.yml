@@ -43,9 +43,11 @@ services:
       - FILE_DELETION_RETRY_DELAY=${FILE_DELETION_RETRY_DELAY}
       - FILE_RECONCILIATION_MIN_AGE=${FILE_RECONCILIATION_MIN_AGE}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-      - JWT_PUBLIC_KEY=${JWT_PUBLIC_KEY} # Integration line: Auth
-      - JWT_ISSUER=${JWT_ISSUER} # Integration line: Auth
-      - SERVICE_SECRET_FILE=${SERVICE_SECRET_FILE}  # Integration line: Auth
+      - JWT_PUBLIC_KEY=${JWT_PUBLIC_KEY}
+      - JWT_ISSUER=${JWT_ISSUER}
+      - SERVICE_SECRET_FILE=${SERVICE_SECRET_FILE}
+      - AUTHSERVICE_INTEGRATION=${AUTHSERVICE_INTEGRATION}
+      - TELEMETRYSERVICE_INTEGRATION=${TELEMETRYSERVICE_INTEGRATION}
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:6010/api/file/health" ]
       interval: 10s

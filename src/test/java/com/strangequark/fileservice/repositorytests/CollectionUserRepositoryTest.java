@@ -1,5 +1,3 @@
-// Integration file: Auth
-
 package com.strangequark.fileservice.repositorytests;
 
 import com.strangequark.fileservice.collection.Collection;

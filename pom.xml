@@ -41,7 +41,7 @@
 			<artifactId>postgresql</artifactId>
 			<scope>runtime</scope>
 		</dependency>
-        <dependency> <!-- Integration function start: Telemetry -->
+        <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
             <version>20240303</version>
@@ -49,7 +49,7 @@
         <dependency>
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka</artifactId>
-        </dependency> <!-- Integration function end: Telemetry -->
+        </dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
@@ -60,7 +60,7 @@
 			<artifactId>h2</artifactId>
 			<scope>test</scope>
 		</dependency>
-		<dependency> <!-- Integration function start: Auth -->
+        <dependency>
 			<groupId>io.jsonwebtoken</groupId>
 			<artifactId>jjwt-api</artifactId>
 			<version>0.11.5</version>
@@ -76,7 +76,7 @@
 			<artifactId>jjwt-jackson</artifactId>
 			<version>0.11.5</version>
 			<scope>runtime</scope>
-		</dependency> <!-- Integration function end: Auth -->
+        </dependency>
 	</dependencies>
 
 	<build>

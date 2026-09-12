@@ -1,5 +1,3 @@
-// Integration file: Auth
-
 package com.strangequark.fileservice.utility;
 
 import com.strangequark.fileservice.collectionuser.CollectionUserRole;

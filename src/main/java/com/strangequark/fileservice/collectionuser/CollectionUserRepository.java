@@ -1,5 +1,3 @@
-// Integration file: Auth
-
 package com.strangequark.fileservice.collectionuser;
 
 import com.strangequark.fileservice.collection.Collection;
@@ -25,6 +23,9 @@ public interface CollectionUserRepository extends JpaRepository<CollectionUser, 
     List<Collection> findCollectionsByUserIdForUpdate(UUID userId);
 
     List<CollectionUser> findAllByCollectionId(UUID collectionId);
+
+    @Query("SELECT c FROM Collection c WHERE NOT EXISTS (SELECT cu FROM CollectionUser cu WHERE cu.collection = c)")
+    List<Collection> findCollectionsWithoutUsers();
 
     @Modifying
     @Transactional

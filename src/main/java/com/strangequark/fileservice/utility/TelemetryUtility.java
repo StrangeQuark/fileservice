@@ -1,15 +1,15 @@
-// Integration file: Telemetry
-
 package com.strangequark.fileservice.utility;
 
 import jakarta.annotation.PreDestroy;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.Async;
@@ -27,23 +27,27 @@ public class TelemetryUtility {
     private static final Logger LOGGER = LoggerFactory.getLogger(TelemetryUtility.class);
 
     private KafkaProducer<String, String> producer;
-    private String cachedServiceToken = null; // Integration line: Auth
-    // Integration function start: Auth
+    private String cachedServiceToken = null;
+    @Value("${authservice.integration}")
+    private boolean authserviceIntegration;
     @Autowired
     private AuthUtility authUtility;
     @Autowired
-    private JwtUtility jwtUtility; // Integration function end: Auth
+    private JwtUtility jwtUtility;
 
     @Async("telemetryExecutor")
     public void sendTelemetryEvent(String eventType, Map<String, Object> metadata) {
         try {
             LOGGER.debug("Attempting to post message to file telemetry Kafka topic");
-            // Integration function start: Auth
-            if (!jwtUtility.isTokenValid(cachedServiceToken)) {
-                cachedServiceToken = authUtility.authenticateServiceAccount();
+            List<Header> headers = new ArrayList<>();
+            if(authserviceIntegration) {
+                if (!jwtUtility.isTokenValid(cachedServiceToken)) {
+                    cachedServiceToken = authUtility.authenticateServiceAccount();
+                }
+
+                if(cachedServiceToken != null)
+                    headers.add(new RecordHeader("Authorization", ("Bearer " + cachedServiceToken).getBytes()));
             }
-            String accessToken = "Bearer " + cachedServiceToken;
-            // Integration function end: Auth
 
             JSONObject requestBody = new JSONObject();
             requestBody.put("serviceName", "fileservice");
@@ -57,7 +61,7 @@ public class TelemetryUtility {
                     null,
                     null,
                     requestBody.toString()
-                    ,List.of(new RecordHeader("Authorization", accessToken.getBytes())) // Integration line: Auth
+                    ,headers
             );
 
             getProducer().send(record, (recordMetadata, exception) -> {
