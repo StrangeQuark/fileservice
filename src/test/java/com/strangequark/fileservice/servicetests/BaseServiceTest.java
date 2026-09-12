@@ -2,15 +2,15 @@ package com.strangequark.fileservice.servicetests;
 
 import com.strangequark.fileservice.collection.Collection;
 import com.strangequark.fileservice.collection.CollectionRepository;
-import com.strangequark.fileservice.collectionuser.CollectionUser;// Integration line: Auth
-import com.strangequark.fileservice.collectionuser.CollectionUserRepository;// Integration line: Auth
-import com.strangequark.fileservice.collectionuser.CollectionUserRole;// Integration line: Auth
+import com.strangequark.fileservice.collectionuser.CollectionUser;
+import com.strangequark.fileservice.collectionuser.CollectionUserRepository;
+import com.strangequark.fileservice.collectionuser.CollectionUserRole;
 import com.strangequark.fileservice.filedeletion.FileDeletionRepository;
 import com.strangequark.fileservice.file.FileService;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
-import com.strangequark.fileservice.utility.AuthUtility;// Integration line: Auth
-import com.strangequark.fileservice.utility.JwtUtility;// Integration line: Auth
+import com.strangequark.fileservice.utility.AuthUtility;
+import com.strangequark.fileservice.utility.JwtUtility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.TestInstance;
@@ -20,7 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;// Integration line: Auth
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -28,7 +28,7 @@ import java.nio.file.Paths;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.mockito.Mockito.when;// Integration line: Auth
+import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -46,13 +46,13 @@ public abstract class BaseServiceTest {
     public CollectionRepository collectionRepository;
     @Autowired
     public FileDeletionRepository fileDeletionRepository;
-    @Autowired// Integration function start: Auth
+    @Autowired
     public CollectionUserRepository collectionUserRepository;
     @MockitoBean
     public JwtUtility jwtUtility;
     @MockitoBean
     public AuthUtility authUtility;
-    public UUID testUserId = UUID.randomUUID();// Integration function end: Auth
+    public UUID testUserId = UUID.randomUUID();
 
     public Collection collection;
     public MockMultipartFile mockMultipartFile;
@@ -71,10 +71,9 @@ public abstract class BaseServiceTest {
         collection = new Collection(collectionName);
         collectionRepository.save(collection);
         LOGGER.info("Test collection successfully created");
-        // Integration function start: Auth
         CollectionUser collectionUser = new CollectionUser(collection, testUserId, CollectionUserRole.OWNER);
         collectionUserRepository.save(collectionUser);
-        when(jwtUtility.extractId()).thenReturn(testUserId.toString());// Integration function end: Auth
+        when(jwtUtility.extractId()).thenReturn(testUserId.toString());
 
         mockMultipartFile = new MockMultipartFile("testFile", fileName,
             "text/plain", "Test file data".getBytes());
@@ -102,7 +101,7 @@ public abstract class BaseServiceTest {
         try {
             fileDeletionRepository.deleteAll();
             collectionRepository.deleteAll();
-            collectionUserRepository.deleteAll();// Integration line: Auth
+            collectionUserRepository.deleteAll();
             LOGGER.info("Collections successful teardown");
         } catch (Exception ex) {
             LOGGER.error("Exception when attempting to clean up collection repository during testing");

@@ -2,19 +2,19 @@ package com.strangequark.fileservice.file;
 
 import com.strangequark.fileservice.collection.*;
 import com.strangequark.fileservice.collection.Collection;
-import com.strangequark.fileservice.collectionuser.CollectionUser;// Integration line: Auth
-import com.strangequark.fileservice.collectionuser.CollectionUserRepository;// Integration line: Auth
-import com.strangequark.fileservice.collectionuser.CollectionUserRequest;// Integration line: Auth
-import com.strangequark.fileservice.collectionuser.CollectionUserRole;// Integration line: Auth
+import com.strangequark.fileservice.collectionuser.CollectionUser;
+import com.strangequark.fileservice.collectionuser.CollectionUserRepository;
+import com.strangequark.fileservice.collectionuser.CollectionUserRequest;
+import com.strangequark.fileservice.collectionuser.CollectionUserRole;
 import com.strangequark.fileservice.filedeletion.FileDeletion;
 import com.strangequark.fileservice.filedeletion.FileDeletionRepository;
 import com.strangequark.fileservice.response.ErrorResponse;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
 import com.strangequark.fileservice.response.UploadResponse;
-import com.strangequark.fileservice.utility.AuthUtility;// Integration line: Auth
-import com.strangequark.fileservice.utility.JwtUtility;// Integration line: Auth
-import com.strangequark.fileservice.utility.TelemetryUtility;// Integration line: Telemetry
+import com.strangequark.fileservice.utility.AuthUtility;
+import com.strangequark.fileservice.utility.JwtUtility;
+import com.strangequark.fileservice.utility.TelemetryUtility;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,6 +63,10 @@ public class FileService {
     private Path uploadDir;
     @Value("${file.reconciliation.min.age}")
     private long reconciliationMinAge;
+    @Value("${authservice.integration}")
+    private boolean authserviceIntegration;
+    @Value("${telemetryservice.integration}")
+    private boolean telemetryserviceIntegration;
 
     private final MetadataRepository metadataRepository;
     private final CollectionRepository collectionRepository;
@@ -71,18 +75,14 @@ public class FileService {
 
     @Value("${ENCRYPTION_KEY}")
     private String encryptionKey;
-    // Integration function start: Auth
     @Autowired
     private CollectionUserRepository collectionUserRepository;
     @Autowired
     JwtUtility jwtUtility;
     @Autowired
     AuthUtility authUtility;
-    // Integration function end: Auth
-    // Integration function start: Telemetry
     @Autowired
     TelemetryUtility telemetryUtility;
-    // Integration function end: Telemetry
 
     public FileService(MetadataRepository metadataRepository, CollectionRepository collectionRepository,
                        FileDeletionRepository fileDeletionRepository, ApplicationEventPublisher applicationEventPublisher) {
@@ -97,6 +97,73 @@ public class FileService {
         if (!Files.exists(uploadDir)) {
             Files.createDirectories(uploadDir);
         }
+
+        initializeCollectionUsers();
+    }
+
+    private void initializeCollectionUsers() {
+        if(!authserviceIntegration)
+            return;
+
+        String superUserId = authUtility.getSuperUserId();
+        if(superUserId == null)
+            return;
+
+        for(Collection collection : collectionUserRepository.findCollectionsWithoutUsers()) {
+            collectionUserRepository.save(new CollectionUser(
+                    collection,
+                    UUID.fromString(superUserId),
+                    CollectionUserRole.OWNER
+            ));
+        }
+    }
+
+    private CollectionUser getRequestingUser(Collection collection) {
+        return collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
+                .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));
+    }
+
+    private void validateCollectionAccess(Collection collection) {
+        if(authserviceIntegration)
+            getRequestingUser(collection);
+    }
+
+    private void validateCollectionWriteAccess(Collection collection) {
+        if(!authserviceIntegration)
+            return;
+
+        CollectionUser requestingUser = getRequestingUser(collection);
+        if(requestingUser.getRole() != CollectionUserRole.OWNER
+                && requestingUser.getRole() != CollectionUserRole.MANAGER
+                && requestingUser.getRole() != CollectionUserRole.READ_WRITE)
+            throw new RuntimeException("Only collection users with OWNER, MANAGER, or READWRITE roles can modify files");
+    }
+
+    private void validateCollectionOwner(Collection collection) {
+        if(authserviceIntegration && getRequestingUser(collection).getRole() != CollectionUserRole.OWNER)
+            throw new RuntimeException("Only collection OWNERs can delete collections.");
+    }
+
+    private String getUserId() {
+        if(authserviceIntegration)
+            return jwtUtility.extractId();
+
+        return "";
+    }
+
+    private void sendTelemetryEvent(String eventType, Map<String, Object> metadata) {
+        if(!telemetryserviceIntegration)
+            return;
+
+        Map<String, Object> telemetryMetadata = new HashMap<>(metadata);
+        if(!authserviceIntegration)
+            telemetryMetadata.remove("userId");
+
+        telemetryUtility.sendTelemetryEvent(eventType, telemetryMetadata);
+    }
+
+    private ResponseEntity<?> authServiceNotEnabled() {
+        return ResponseEntity.status(404).body(new ErrorResponse("Authservice integration is not enabled"));
     }
 
     @Transactional(readOnly = true)
@@ -106,9 +173,7 @@ public class FileService {
         try {
             Collection collection = collectionRepository.findByName(collectionName)
                     .orElseThrow(() -> new RuntimeException("Collection not found when getting all files"));
-            // Integration function start: Auth
-            collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
-                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));// Integration function end: Auth
+            validateCollectionAccess(collection);
 
             List<Metadata> filesMetadata = metadataRepository.findByCollectionId(collection.getId());
 
@@ -135,17 +200,7 @@ public class FileService {
             Collection collection = collectionRepository.findByName(collectionName)
                     .orElseThrow(() -> new RuntimeException("Collection not found when deleting file"));
 
-            // Integration function start: Auth
-            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
-                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));
-
-            // Ensure that the requesting user has the OWNER, MANAGER, or READWRITE role
-            if (requestingUser.getRole() != CollectionUserRole.OWNER
-                    && requestingUser.getRole() != CollectionUserRole.MANAGER
-                    && requestingUser.getRole() != CollectionUserRole.READ_WRITE) {
-                throw new RuntimeException("Only collection users with OWNER, MANAGER, or READWRITE roles can delete files");
-            }
-            // Integration function end: Auth
+            validateCollectionWriteAccess(collection);
             Optional<Metadata> metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName);
 
             if(metadata.isEmpty()) {
@@ -162,15 +217,14 @@ public class FileService {
             ));
             metadataRepository.delete(metadata.get());
             applicationEventPublisher.publishEvent(fileDeletion);
-            // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-delete", Map.of(
-                            "userId", jwtUtility.extractId(), // Integration line: Auth
+            sendTelemetryEvent("file-delete", Map.of(
+                            "userId", getUserId(),
                             "collection-id", collection.getId(),
                             "collection-name", collection.getName(),
                             "file-id", metadata.get().getId(),
                             "file-name", metadata.get().getFileName()
                     )
-            ); // Integration function end: Telemetry
+            );
 
             LOGGER.info("File deletion successfully queued");
             return ResponseEntity.ok("File deletion successfully queued");
@@ -191,9 +245,7 @@ public class FileService {
         try {
             Collection collection = collectionRepository.findByName(collectionName)
                     .orElseThrow(() -> new RuntimeException("Collection not found"));
-            // Integration function start: Auth
-            collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
-                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));// Integration function end: Auth
+            validateCollectionAccess(collection);
 
             Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
             Path filePath = uploadDir.resolve(metadata.getFileUUID());
@@ -205,15 +257,14 @@ public class FileService {
                     throw new IOException("File download failed", ex);
                 }
             };
-            // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-download", Map.of(
-                            "userId", jwtUtility.extractId(), // Integration line: Auth
+            sendTelemetryEvent("file-download", Map.of(
+                            "userId", getUserId(),
                             "collection-id", collection.getId(),
                             "collection-name", collection.getName(),
                             "file-id", metadata.getId(),
                             "file-name", metadata.getFileName()
                     )
-            ); // Integration function end: Telemetry
+            );
 
             LOGGER.info("File successfully sent to user");
             return ResponseEntity.ok()
@@ -239,9 +290,7 @@ public class FileService {
         try {
             Collection collection = collectionRepository.findByName(collectionName)
                     .orElseThrow(() -> new RuntimeException("Collection not found"));
-            // Integration function start: Auth
-            collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
-                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));// Integration function end: Auth
+            validateCollectionAccess(collection);
 
             List<Metadata> metadata = collection.getMetadataList();
 
@@ -275,14 +324,13 @@ public class FileService {
                     throw new IOException("File download failed", ex);
                 }
             };
-            // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-download", Map.of(
-                            "userId", jwtUtility.extractId(), // Integration line: Auth
+            sendTelemetryEvent("file-download", Map.of(
+                            "userId", getUserId(),
                             "collection-id", collection.getId(),
                             "collection-name", collection.getName(),
                             "file-count", metadata.size()
                     )
-            ); // Integration function end: Telemetry
+            );
 
             LOGGER.info("All files successfully sent to user");
             return ResponseEntity.ok()
@@ -303,9 +351,7 @@ public class FileService {
         try {
             Collection collection = collectionRepository.findByName(collectionName)
                     .orElseThrow(() -> new RuntimeException("Unable to locate collection when streaming file"));
-            // Integration function start: Auth
-            collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
-                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));// Integration function end: Auth
+            validateCollectionAccess(collection);
 
             Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName)
                     .orElseThrow(() -> new RuntimeException("File not found"));
@@ -323,15 +369,14 @@ public class FileService {
                         .body(new byte[0]);
             }
             byte[] decryptedChunk = decryptRegion(filePath, metadata, regionRequest.start(), regionRequest.count());
-            // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-stream", Map.of(
-                            "userId", jwtUtility.extractId(), // Integration line: Auth
+            sendTelemetryEvent("file-stream", Map.of(
+                            "userId", getUserId(),
                             "collection-id", collection.getId(),
                             "collection-name", collection.getName(),
                             "file-id", metadata.getId(),
                             "file-name", metadata.getFileName()
                     )
-            ); // Integration function end: Telemetry
+            );
 
             LOGGER.info("Stream file successfully sent");
             ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.status(regionRequest.isPartial() ? HttpStatus.PARTIAL_CONTENT : HttpStatus.OK)
@@ -366,17 +411,7 @@ public class FileService {
             if(metadataRepository.findByCollectionIdAndFileName(collection.getId(), file.getOriginalFilename()).isPresent())
                 return ResponseEntity.status(409).body(new ErrorResponse("File name already exists in collection"));
 
-            // Integration function start: Auth
-            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
-                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));
-
-            // Ensure that the requesting user has the OWNER, MANAGER, or READWRITE role
-            if (requestingUser.getRole() != CollectionUserRole.OWNER
-                    && requestingUser.getRole() != CollectionUserRole.MANAGER
-                    && requestingUser.getRole() != CollectionUserRole.READ_WRITE) {
-                throw new RuntimeException("Only collection users with OWNER, MANAGER, or READWRITE roles can upload files");
-            }
-            // Integration function end: Auth
+            validateCollectionWriteAccess(collection);
             String fileUUID = UUID.randomUUID().toString();
             String originalName = file.getOriginalFilename();
 
@@ -415,16 +450,15 @@ public class FileService {
 
                 Files.move(tempFilePath, filePath, StandardCopyOption.ATOMIC_MOVE);
                 metadataRepository.saveAndFlush(metadata);
-                // Integration function start: Telemetry
-                telemetryUtility.sendTelemetryEvent("file-upload", Map.of(
-                                "userId", jwtUtility.extractId(), // Integration line: Auth
+                sendTelemetryEvent("file-upload", Map.of(
+                                "userId", getUserId(),
                                 "collection-id", collection.getId(),
                                 "collection-name", collection.getName(),
                                 "file-id", metadata.getId(),
                                 "file-name", metadata.getFileName(),
                                 "file-size", metadata.getFileSize()
                         )
-                ); // Integration function end: Telemetry
+                );
 
                 LOGGER.info("File successfully uploaded");
                 return ResponseEntity.ok(new UploadResponse("File successfully uploaded"));
@@ -455,16 +489,16 @@ public class FileService {
                 return ResponseEntity.status(409).body(new ErrorResponse("Collection with this name already exists"));
 
             Collection newCollection = new Collection(collectionName);
-            newCollection.addUser(new CollectionUser(newCollection, UUID.fromString(jwtUtility.extractId()), CollectionUserRole.OWNER));// Integration line: Auth
-
             collectionRepository.save(newCollection);
-            // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-create-collection", Map.of(
-                            "userId", jwtUtility.extractId(), // Integration line: Auth
+            if(authserviceIntegration)
+                collectionUserRepository.save(new CollectionUser(newCollection, UUID.fromString(jwtUtility.extractId()), CollectionUserRole.OWNER));
+
+            sendTelemetryEvent("file-create-collection", Map.of(
+                            "userId", getUserId(),
                             "collection-id", newCollection.getId(),
                             "collection-name", newCollection.getName()
                     )
-            ); // Integration function end: Telemetry
+            );
 
             LOGGER.info("New collection successfully created");
             return ResponseEntity.ok("New collection successfully created");
@@ -482,7 +516,8 @@ public class FileService {
         try {
             List<Collection> collectionList;
             collectionList = collectionRepository.findAll();
-            collectionList = collectionUserRepository.findCollectionsByUserId(UUID.fromString(jwtUtility.extractId()));// Integration line: Auth
+            if(authserviceIntegration)
+                collectionList = collectionUserRepository.findCollectionsByUserId(UUID.fromString(jwtUtility.extractId()));
 
             return ResponseEntity.ok(collectionList);
         } catch(Exception ex) {
@@ -500,23 +535,14 @@ public class FileService {
             Collection collection = collectionRepository.findByNameForUpdate(collectionName)
                     .orElseThrow(() -> new RuntimeException("Unable to locate collection when attempting to delete"));
 
-            // Integration function start: Auth
-            CollectionUser requestingUser = collectionUserRepository.findByUserIdAndCollectionId(UUID.fromString(jwtUtility.extractId()), collection.getId())
-                    .orElseThrow(() -> new RuntimeException("Requesting user does not have access to this collection"));
-
-            // Ensure that the request user has access to this collection and has the OWNER role
-            if (requestingUser.getRole() != CollectionUserRole.OWNER) {
-                throw new RuntimeException("Only collection OWNERs can delete collections.");
-            }
-            // Integration function end: Auth
+            validateCollectionOwner(collection);
             deleteCollectionAndFiles(collection);
-            // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-delete-collection", Map.of(
-                            "userId", jwtUtility.extractId(), // Integration line: Auth
+            sendTelemetryEvent("file-delete-collection", Map.of(
+                            "userId", getUserId(),
                             "collection-id", collection.getId(),
                             "collection-name", collection.getName()
                     )
-            ); // Integration function end: Telemetry
+            );
 
             LOGGER.info("Collection successfully deleted");
             return ResponseEntity.ok("Collection and children files successfully deleted");
@@ -527,10 +553,12 @@ public class FileService {
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
     }
-    // Integration function start: Auth
     @Transactional(readOnly = true)
     public ResponseEntity<?> getCurrentUserRole(String collectionName) {
         LOGGER.debug("Attempting to retrieve current user's role");
+
+        if(!authserviceIntegration)
+            return authServiceNotEnabled();
 
         try {
             Collection collection = collectionRepository.findByName(collectionName)
@@ -550,6 +578,9 @@ public class FileService {
     @Transactional(readOnly = true)
     public ResponseEntity<?> getUsersByCollection(String collectionName) {
         LOGGER.debug("Attempting to retrieve users by collection");
+
+        if(!authserviceIntegration)
+            return authServiceNotEnabled();
 
         try {
             Collection collection = collectionRepository.findByName(collectionName)
@@ -572,12 +603,18 @@ public class FileService {
     public ResponseEntity<?> getAllRoles() {
         LOGGER.debug("Attempting to retrieve all Collection User roles");
 
+        if(!authserviceIntegration)
+            return authServiceNotEnabled();
+
         return ResponseEntity.ok(CollectionUserRole.values());
     }
 
     @Transactional
     public ResponseEntity<?> updateUserRole(CollectionUserRequest collectionUserRequest) {
         LOGGER.info("Attempting to update user's role");
+
+        if(!authserviceIntegration)
+            return authServiceNotEnabled();
 
         try {
             Collection collection = collectionRepository.findByNameForUpdate(collectionUserRequest.getCollectionName())
@@ -625,14 +662,13 @@ public class FileService {
             //Update the target user's role
             targetUser.setRole(collectionUserRequest.getRole());
             collectionUserRepository.save(targetUser);
-            // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-update-user-role", Map.of(
-                            "userId", jwtUtility.extractId(), // Integration line: Auth
+            sendTelemetryEvent("file-update-user-role", Map.of(
+                            "userId", getUserId(),
                             "collection-id", collection.getId(),
                             "collection-name", collection.getName(),
                             "role", collectionUserRequest.getRole().name()
                     )
-            ); // Integration function end: Telemetry
+            );
 
             LOGGER.info("User role successfully updated");
             return ResponseEntity.ok("User role successfully updated");
@@ -647,6 +683,9 @@ public class FileService {
     @Transactional(readOnly = false)
     public ResponseEntity<?> addUserToCollection(CollectionUserRequest collectionUserRequest) {
         LOGGER.info("Attempting to add user to collection");
+
+        if(!authserviceIntegration)
+            return authServiceNotEnabled();
 
         try {
             Collection collection = collectionRepository.findByNameForUpdate(collectionUserRequest.getCollectionName())
@@ -674,13 +713,12 @@ public class FileService {
 
             collection.addUser(new CollectionUser(collection, userId, collectionUserRequest.getRole()));
             collectionRepository.save(collection);
-            // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-add-user-to-collection", Map.of(
-                            "userId", jwtUtility.extractId(), // Integration line: Auth
+            sendTelemetryEvent("file-add-user-to-collection", Map.of(
+                            "userId", getUserId(),
                             "collection-id", collection.getId(),
                             "collection-name", collection.getName()
                     )
-            ); // Integration function end: Telemetry
+            );
 
             LOGGER.info("User successfully added to collection");
             return ResponseEntity.ok("User successfully added to collection");
@@ -695,6 +733,9 @@ public class FileService {
     @Transactional(readOnly = false)
     public ResponseEntity<?> deleteUserFromCollection(CollectionUserRequest collectionUserRequest) {
         LOGGER.info("Attempting to delete user from collection");
+
+        if(!authserviceIntegration)
+            return authServiceNotEnabled();
 
         try {
             Collection collection = collectionRepository.findByNameForUpdate(collectionUserRequest.getCollectionName())
@@ -732,13 +773,12 @@ public class FileService {
             }
 
             collectionUserRepository.deleteCollectionUser(userId, collection.getId());
-            // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-delete-user-from-collection", Map.of(
-                            "userId", jwtUtility.extractId(), // Integration line: Auth
+            sendTelemetryEvent("file-delete-user-from-collection", Map.of(
+                            "userId", getUserId(),
                             "collection-id", collection.getId(),
                             "collection-name", collection.getName()
                     )
-            ); // Integration function end: Telemetry
+            );
 
             LOGGER.info("User successfully deleted from collection");
             return ResponseEntity.ok("User successfully deleted from collection");
@@ -753,6 +793,9 @@ public class FileService {
     @Transactional(readOnly = false)
     public ResponseEntity<?> deleteUserFromAllCollections(CollectionUserRequest collectionUserRequest) {
         LOGGER.info("Attempting to delete user from all collections");
+
+        if(!authserviceIntegration)
+            return authServiceNotEnabled();
 
         try {
             // Ensure the target user exists
@@ -825,12 +868,11 @@ public class FileService {
                 if(!collectionsToDelete.contains(collection))
                     collectionUserRepository.deleteCollectionUser(userId, collection.getId());
             }
-            // Integration function start: Telemetry
-            telemetryUtility.sendTelemetryEvent("file-delete-user-from-all-collections", Map.of(
-                            "userId", jwtUtility.extractId(), // Integration line: Auth
+            sendTelemetryEvent("file-delete-user-from-all-collections", Map.of(
+                            "userId", getUserId(),
                             "collections-count", collections.size()
                     )
-            ); // Integration function end: Telemetry
+            );
 
             LOGGER.info("User successfully deleted from all collections");
             return ResponseEntity.ok("User successfully deleted from all collections");
@@ -840,7 +882,7 @@ public class FileService {
             LOGGER.debug("Stack trace: ", ex);
             return ResponseEntity.status(400).body(new ErrorResponse(ex.getMessage()));
         }
-    }// Integration function end: Auth
+    }
 
     private void deleteCollectionAndFiles(Collection collection) {
         LOGGER.debug("Queueing all files in collection for deletion");

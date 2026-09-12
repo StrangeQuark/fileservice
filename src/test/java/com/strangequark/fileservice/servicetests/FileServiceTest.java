@@ -1,9 +1,9 @@
 package com.strangequark.fileservice.servicetests;
 
 import com.strangequark.fileservice.collection.Collection;
-import com.strangequark.fileservice.collectionuser.CollectionUser;// Integration line: Auth
-import com.strangequark.fileservice.collectionuser.CollectionUserRequest;// Integration line: Auth
-import com.strangequark.fileservice.collectionuser.CollectionUserRole;// Integration line: Auth
+import com.strangequark.fileservice.collectionuser.CollectionUser;
+import com.strangequark.fileservice.collectionuser.CollectionUserRequest;
+import com.strangequark.fileservice.collectionuser.CollectionUserRole;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.response.UploadResponse;
 import org.junit.jupiter.api.Assertions;
@@ -24,13 +24,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
-import java.util.Arrays;// Integration line: Auth
+import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;// Integration line: Auth
+import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import static org.mockito.Mockito.when;// Integration line: Auth
+import static org.mockito.Mockito.when;
 
 public class FileServiceTest extends BaseServiceTest {
 
@@ -408,7 +408,6 @@ public class FileServiceTest extends BaseServiceTest {
         Assertions.assertEquals(200, response.getStatusCode().value());
         Assertions.assertFalse(collectionRepository.findByName(collectionName).isPresent());
     }
-    // Integration function start: Auth
     @Test
     void getCurrentUserRoleTest() {
         LOGGER.info("Begin getCurrentUserRoleTest");
@@ -582,5 +581,5 @@ public class FileServiceTest extends BaseServiceTest {
                 .findByUserIdAndCollectionId(targetUserId, protectedCollection.getId())
                 .isPresent());
         Assertions.assertTrue(collectionRepository.findByName(protectedCollection.getName()).isPresent());
-    }// Integration function end: Auth
+    }
 }

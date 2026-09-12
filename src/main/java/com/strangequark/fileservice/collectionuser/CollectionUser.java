@@ -1,5 +1,3 @@
-// Integration file: Auth
-
 package com.strangequark.fileservice.collectionuser;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;

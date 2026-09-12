@@ -1,5 +1,3 @@
-// Integration file: Auth
-
 package com.strangequark.fileservice.security;
 
 import io.jsonwebtoken.Claims;

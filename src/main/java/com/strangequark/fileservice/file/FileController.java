@@ -1,6 +1,6 @@
 package com.strangequark.fileservice.file;
 
-import com.strangequark.fileservice.collectionuser.CollectionUserRequest;// Integration line: Auth
+import com.strangequark.fileservice.collectionuser.CollectionUserRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -59,7 +59,6 @@ public class FileController {
     public ResponseEntity<?> deleteCollection(@RequestBody FileRequest fileRequest) {
         return fileService.deleteCollection(fileRequest.getCollectionName());
     }
-    // Integration function start: Auth
     @PostMapping("/get-current-user-role")
     public ResponseEntity<?> getCurrentUserRole(@RequestBody FileRequest fileRequest) {
         return fileService.getCurrentUserRole(fileRequest.getCollectionName());
@@ -93,5 +92,5 @@ public class FileController {
     @PostMapping("/delete-user-from-all-collections")
     public ResponseEntity<?> deleteUserFromAllCollections(@RequestBody CollectionUserRequest collectionUserRequest) {
         return fileService.deleteUserFromAllCollections(collectionUserRequest);
-    }// Integration function end: Auth
+    }
 }

@@ -1,14 +1,14 @@
 package com.strangequark.fileservice.collection;
 
 import com.fasterxml.jackson.annotation.JsonManagedReference;
-import com.strangequark.fileservice.collectionuser.CollectionUser; // Integration line: Auth
+import com.strangequark.fileservice.collectionuser.CollectionUser;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.utility.LocalDateTimeEncryptDecryptConverter;
 import com.strangequark.fileservice.utility.StringEncryptDecryptConverter;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList; // Integration line: Auth
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,7 +17,7 @@ import java.util.UUID;
 public class Collection {
 
     public Collection() {
-        this.collectionUsers = new ArrayList<>();// Integration line: Auth
+        this.collectionUsers = new ArrayList<>();
     }
 
     public Collection(String name) {
@@ -49,10 +49,9 @@ public class Collection {
     @OneToMany(mappedBy = "collection", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
     private List<Metadata> metadataList;
-    // Integration function start: Auth
     @OneToMany(mappedBy = "collection", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
-    private List<CollectionUser> collectionUsers;// Integration function end: Auth
+    private List<CollectionUser> collectionUsers;
 
     @PrePersist
     protected void onCreate() {
@@ -104,7 +103,6 @@ public class Collection {
     public void setMetadataList(List<Metadata> metadataList) {
         this.metadataList = metadataList;
     }
-    // Integration function start: Auth
     public List<CollectionUser> getCollectionUsers() {
         return collectionUsers;
     }
@@ -115,5 +113,5 @@ public class Collection {
 
     public void addUser(CollectionUser collectionUser) {
         this.collectionUsers.add(collectionUser);
-    }// Integration function end: Auth
+    }
 }

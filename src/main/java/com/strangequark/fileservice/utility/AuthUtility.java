@@ -1,5 +1,3 @@
-// Integration file: Auth
-
 package com.strangequark.fileservice.utility;
 
 import org.slf4j.Logger;
@@ -91,6 +89,40 @@ public class AuthUtility {
             return response.replace("\"", "").trim();
         } catch (RestClientException ex) {
             LOGGER.error("Failed to get user id in auth utility: " + ex.getMessage());
+            LOGGER.debug("Stack trace: ", ex);
+            return null;
+        }
+    }
+
+    public String getSuperUserId() {
+        try {
+            LOGGER.debug("Attempting to get super user id");
+
+            String accessToken = authenticateServiceAccount();
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(accessToken);
+
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+            ResponseEntity<String> responseEntity = restTemplate.exchange(
+                    "http://auth-service:6001/api/auth/user/get-super-user-id",
+                    HttpMethod.POST,
+                    entity,
+                    String.class
+            );
+
+            String response = responseEntity.getBody();
+
+            if(response == null) {
+                LOGGER.error("getSuperUserId response is null");
+                return null;
+            }
+
+            LOGGER.debug("Super user id retrieval success");
+            return response.replace("\"", "").trim();
+        } catch(RestClientException ex) {
+            LOGGER.error("Failed to get super user id in auth utility: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
             return null;
         }
