@@ -12,7 +12,9 @@ import org.springframework.test.context.ActiveProfiles;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @DataJpaTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -71,8 +73,10 @@ public class MetadataRepositoryTest {
         List<Metadata> metadata = metadataRepository.findByCollectionId(collection.getId());
 
         Assertions.assertEquals(2, metadata.size());
-        Assertions.assertEquals("testFile.file", metadata.get(0).getFileName());
-        Assertions.assertEquals("testFile2.file", metadata.get(1).getFileName());
+        Assertions.assertEquals(
+                Set.of("testFile.file", "testFile2.file"),
+                metadata.stream().map(Metadata::getFileName).collect(Collectors.toSet())
+        );
     }
 
     @Test

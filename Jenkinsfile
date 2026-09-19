@@ -5,6 +5,7 @@ pipeline {
         VAULT_URL = credentials('VAULT_URL')
         CICD_TOKEN = credentials('FILE_CICD_TOKEN')
         VAULTSERVICE_ENABLED = credentials('VAULTSERVICE_ENABLED')
+        KUBERNETES_CICD_TOKEN = credentials('KUBERNETES_CICD_TOKEN')
     }
 
     stages {
@@ -32,6 +33,32 @@ pipeline {
         stage("Deploy & Health Check") {
             steps {
                 script {
+                    def kubernetesEnabled = env.KUBERNETES_ENABLED == "true"
+
+                    if(kubernetesEnabled) {
+                        def imageRepository = env.SERVICE_IMAGE_REPOSITORY
+                        def kubernetesServiceUrl = env.KUBERNETESERVICE_URL
+
+                        if(imageRepository.isEmpty() || kubernetesServiceUrl.isEmpty())
+                            error("FileService Kubernetes deployment configuration is incomplete")
+
+                        def image = imageRepository + ":" + env.BUILD_NUMBER
+
+                        withEnv(["SERVICE_IMAGE=" + image, "KUBERNETESERVICE_URL=" + kubernetesServiceUrl]) {
+                            sh "docker build -t " + image + " ."
+                            sh "docker push " + image
+                            sh '''
+                                curl --fail-with-body -X POST \\
+                                    -H "X-CICD-TOKEN: $KUBERNETES_CICD_TOKEN" \\
+                                    -F "serviceName=fileservice" \\
+                                    -F "image=$SERVICE_IMAGE" \\
+                                    -F "environmentFile=@fileservice.env" \\
+                                    "$KUBERNETESERVICE_URL/api/kubernetes/deploy"
+                            '''
+                        }
+                        return
+                    }
+
                     try {
                         sh "docker compose --env-file fileservice.env up --build -d"
 
