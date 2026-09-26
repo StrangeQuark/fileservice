@@ -12,6 +12,7 @@ import com.strangequark.fileservice.response.ErrorResponse;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
 import com.strangequark.fileservice.response.UploadResponse;
+import com.strangequark.fileservice.storage.S3FileStorage;
 import com.strangequark.fileservice.utility.AuthUtility;
 import com.strangequark.fileservice.utility.JwtUtility;
 import com.strangequark.fileservice.utility.TelemetryUtility;
@@ -39,14 +40,13 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.security.SecureRandom;
 import java.util.*;
 import java.util.zip.ZipEntry;
@@ -59,8 +59,6 @@ public class FileService {
     private static final int GCM_TAG_SIZE = 16;
     private static final int STREAM_CHUNK_SIZE = 1024 * 1024;
     private static final String ENCRYPTION_VERSION = "AES_GCM_V1";
-    @Value("${file.storage.path}")
-    private Path uploadDir;
     @Value("${file.reconciliation.min.age}")
     private long reconciliationMinAge;
     @Value("${authservice.integration}")
@@ -72,6 +70,7 @@ public class FileService {
     private final CollectionRepository collectionRepository;
     private final FileDeletionRepository fileDeletionRepository;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final S3FileStorage s3FileStorage;
 
     @Value("${ENCRYPTION_KEY}")
     private String encryptionKey;
@@ -85,19 +84,17 @@ public class FileService {
     TelemetryUtility telemetryUtility;
 
     public FileService(MetadataRepository metadataRepository, CollectionRepository collectionRepository,
-                       FileDeletionRepository fileDeletionRepository, ApplicationEventPublisher applicationEventPublisher) {
+                       FileDeletionRepository fileDeletionRepository, ApplicationEventPublisher applicationEventPublisher,
+                       S3FileStorage s3FileStorage) {
         this.metadataRepository = metadataRepository;
         this.collectionRepository = collectionRepository;
         this.fileDeletionRepository = fileDeletionRepository;
         this.applicationEventPublisher = applicationEventPublisher;
+        this.s3FileStorage = s3FileStorage;
     }
 
     @PostConstruct
-    public void initializeFileStorage() throws IOException {
-        if (!Files.exists(uploadDir)) {
-            Files.createDirectories(uploadDir);
-        }
-
+    public void initializeFileService() {
         initializeCollectionUsers();
     }
 
@@ -248,10 +245,9 @@ public class FileService {
             validateCollectionAccess(collection);
 
             Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
-            Path filePath = uploadDir.resolve(metadata.getFileUUID());
             StreamingResponseBody stream = outputStream -> {
                 try {
-                    writeDecryptedFile(filePath, metadata, outputStream);
+                    writeDecryptedFile(metadata, outputStream);
                 } catch(Exception ex) {
                     LOGGER.error("Failed to decrypt file: " + ex.getMessage());
                     throw new IOException("File download failed", ex);
@@ -308,13 +304,11 @@ public class FileService {
                 try(ZipOutputStream zip = new ZipOutputStream(outputStream)) {
                     for (int i = 0; i < metadata.size(); i++) {
                         Metadata metadataItem = metadata.get(i);
-                        Path filePath = uploadDir.resolve(metadataItem.getFileUUID());
-
                         ZipEntry entry = new ZipEntry(zipEntryNames.get(i));
                         entry.setSize(metadataItem.getFileSize());
                         zip.putNextEntry(entry);
 
-                        writeDecryptedFile(filePath, metadataItem, zip);
+                        writeDecryptedFile(metadataItem, zip);
 
                         zip.closeEntry();
                     }
@@ -356,7 +350,6 @@ public class FileService {
             Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName)
                     .orElseThrow(() -> new RuntimeException("File not found"));
 
-            Path filePath = uploadDir.resolve(metadata.getFileUUID());
             long fileSize = metadata.getFileSize();
             RegionRequest regionRequest;
             try {
@@ -368,7 +361,7 @@ public class FileService {
                         .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileSize)
                         .body(new byte[0]);
             }
-            byte[] decryptedChunk = decryptRegion(filePath, metadata, regionRequest.start(), regionRequest.count());
+            byte[] decryptedChunk = decryptRegion(metadata, regionRequest.start(), regionRequest.count());
             sendTelemetryEvent("file-stream", Map.of(
                             "userId", getUserId(),
                             "collection-id", collection.getId(),
@@ -380,7 +373,7 @@ public class FileService {
 
             LOGGER.info("Stream file successfully sent");
             ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.status(regionRequest.isPartial() ? HttpStatus.PARTIAL_CONTENT : HttpStatus.OK)
-                    .contentType(resolveMediaType(metadata, filePath))
+                    .contentType(resolveMediaType(metadata))
                     .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                     .contentLength(decryptedChunk.length);
 
@@ -421,13 +414,13 @@ public class FileService {
             }
 
             String storedFileName = fileUUID + fileExtension;
-            Path filePath = uploadDir.resolve(storedFileName);
-            Path tempFilePath = uploadDir.resolve(storedFileName + ".tmp");
+            Path temporaryFile = s3FileStorage.createTemporaryFile();
+            boolean stored = false;
 
             byte[] iv = generateIv();
             try {
                 try (InputStream inputStream = file.getInputStream();
-                     OutputStream outputStream = Files.newOutputStream(tempFilePath)) {
+                     OutputStream outputStream = Files.newOutputStream(temporaryFile)) {
                     byte[] buffer = new byte[STREAM_CHUNK_SIZE];
                     int bytesRead;
                     long chunkIndex = 0;
@@ -448,7 +441,8 @@ public class FileService {
                         ENCRYPTION_VERSION
                 );
 
-                Files.move(tempFilePath, filePath, StandardCopyOption.ATOMIC_MOVE);
+                s3FileStorage.store(storedFileName, temporaryFile);
+                stored = true;
                 metadataRepository.saveAndFlush(metadata);
                 sendTelemetryEvent("file-upload", Map.of(
                                 "userId", getUserId(),
@@ -463,9 +457,12 @@ public class FileService {
                 LOGGER.info("File successfully uploaded");
                 return ResponseEntity.ok(new UploadResponse("File successfully uploaded"));
             } catch(Exception ex) {
-                Files.deleteIfExists(tempFilePath);
-                Files.deleteIfExists(filePath);
+                if(stored)
+                    s3FileStorage.delete(storedFileName);
+
                 throw ex;
+            } finally {
+                Files.deleteIfExists(temporaryFile);
             }
         } catch(DataIntegrityViolationException ex) {
             TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
@@ -924,36 +921,32 @@ public class FileService {
         for(FileDeletion fileDeletion : fileDeletions)
             deletePendingFile(fileDeletion);
 
-        try (var files = Files.list(uploadDir)) {
-            for(Path filePath : files.toList()) {
-                String fileName = filePath.getFileName().toString();
-
-                if(!Files.isRegularFile(filePath)
-                        || expectedFiles.contains(fileName)
-                        || Files.getLastModifiedTime(filePath).toMillis()
-                        > System.currentTimeMillis() - reconciliationMinAge)
+        try {
+            for(var storedFile : s3FileStorage.list().entrySet()) {
+                if(expectedFiles.contains(storedFile.getKey())
+                        || storedFile.getValue() > System.currentTimeMillis() - reconciliationMinAge)
                     continue;
 
-                Files.deleteIfExists(filePath);
+                s3FileStorage.delete(storedFile.getKey());
                 LOGGER.info("Orphaned file successfully deleted");
             }
-        } catch(IOException ex) {
+        } catch(Exception ex) {
             LOGGER.error("Failed to reconcile orphaned files: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
         }
 
         for(Metadata metadata : metadataList) {
-            if(!Files.exists(uploadDir.resolve(metadata.getFileUUID())))
+            if(!s3FileStorage.exists(metadata.getFileUUID()))
                 LOGGER.error("Metadata exists without a physical file: " + metadata.getFileUUID());
         }
     }
 
     private void deletePendingFile(FileDeletion fileDeletion) {
         try {
-            Files.deleteIfExists(uploadDir.resolve(fileDeletion.getFileUUID()));
+            s3FileStorage.delete(fileDeletion.getFileUUID());
             fileDeletionRepository.delete(fileDeletion);
             LOGGER.info("File successfully deleted");
-        } catch(IOException ex) {
+        } catch(Exception ex) {
             LOGGER.error("Failed to delete file: " + ex.getMessage());
             LOGGER.debug("Stack trace: ", ex);
         }
@@ -994,12 +987,12 @@ public class FileService {
         return iv;
     }
 
-    private MediaType resolveMediaType(Metadata metadata, Path filePath) {
+    private MediaType resolveMediaType(Metadata metadata) {
         if (metadata.getFileType() != null && !metadata.getFileType().isBlank()) {
             return MediaType.parseMediaType(metadata.getFileType());
         }
 
-        return MediaTypeFactory.getMediaType(filePath.toString()).orElse(MediaType.valueOf("video/mp4"));
+        return MediaTypeFactory.getMediaType(metadata.getFileName()).orElse(MediaType.valueOf("video/mp4"));
     }
 
     private RegionRequest resolveRegionRequest(String rangeHeader, long fileSize) {
@@ -1033,7 +1026,7 @@ public class FileService {
                 hasRange || start > 0 || end < fileSize - 1);
     }
 
-    private byte[] decryptRegion(Path filePath, Metadata metadata, long start, long count) throws Exception {
+    private byte[] decryptRegion(Metadata metadata, long start, long count) throws Exception {
         if(count == 0)
             return new byte[0];
 
@@ -1041,13 +1034,21 @@ public class FileService {
         long firstChunk = start / STREAM_CHUNK_SIZE;
         long lastChunk = (start + count - 1) / STREAM_CHUNK_SIZE;
 
-        for(long chunkIndex = firstChunk; chunkIndex <= lastChunk; chunkIndex++) {
-            byte[] decryptedChunk = decryptChunk(filePath, metadata, chunkIndex);
-            long chunkStart = chunkIndex * STREAM_CHUNK_SIZE;
-            int startIndex = (int) Math.max(0, start - chunkStart);
-            int endIndex = (int) Math.min(decryptedChunk.length, start + count - chunkStart);
+        long encryptedStart = getEncryptedChunkOffset(firstChunk);
+        long encryptedEnd = getEncryptedChunkOffset(lastChunk)
+                + getEncryptedChunkLength(metadata, lastChunk) - 1;
 
-            outputStream.write(decryptedChunk, startIndex, endIndex - startIndex);
+        try(InputStream inputStream = new ByteArrayInputStream(
+                s3FileStorage.readRange(metadata.getFileUUID(), encryptedStart, encryptedEnd)
+        )) {
+            for(long chunkIndex = firstChunk; chunkIndex <= lastChunk; chunkIndex++) {
+                byte[] decryptedChunk = decryptChunk(inputStream, metadata, chunkIndex);
+                long chunkStart = chunkIndex * STREAM_CHUNK_SIZE;
+                int startIndex = (int) Math.max(0, start - chunkStart);
+                int endIndex = (int) Math.min(decryptedChunk.length, start + count - chunkStart);
+
+                outputStream.write(decryptedChunk, startIndex, endIndex - startIndex);
+            }
         }
 
         return outputStream.toByteArray();
@@ -1091,31 +1092,29 @@ public class FileService {
         return zipEntryName;
     }
 
-    private void writeDecryptedFile(Path filePath, Metadata metadata, OutputStream outputStream) throws Exception {
+    private void writeDecryptedFile(Metadata metadata, OutputStream outputStream) throws Exception {
         long chunkCount = (metadata.getFileSize() + STREAM_CHUNK_SIZE - 1) / STREAM_CHUNK_SIZE;
 
-        try(RandomAccessFile randomAccessFile = new RandomAccessFile(filePath.toFile(), "r")) {
+        try(InputStream inputStream = s3FileStorage.read(metadata.getFileUUID())) {
             for(long chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
-                outputStream.write(decryptChunk(randomAccessFile, metadata, chunkIndex));
+                outputStream.write(decryptChunk(inputStream, metadata, chunkIndex));
             }
         }
     }
 
-    private byte[] decryptChunk(RandomAccessFile randomAccessFile, Metadata metadata, long chunkIndex) throws Exception {
-        long chunkStart = chunkIndex * STREAM_CHUNK_SIZE;
-        int plaintextLength = (int) Math.min(STREAM_CHUNK_SIZE, metadata.getFileSize() - chunkStart);
-        byte[] encryptedChunk = new byte[plaintextLength + GCM_TAG_SIZE];
-
-        randomAccessFile.seek(chunkIndex * (STREAM_CHUNK_SIZE + GCM_TAG_SIZE));
-        randomAccessFile.readFully(encryptedChunk);
-
+    private byte[] decryptChunk(InputStream inputStream, Metadata metadata, long chunkIndex) throws Exception {
+        byte[] encryptedChunk = inputStream.readNBytes(getEncryptedChunkLength(metadata, chunkIndex));
         return getCipher(Cipher.DECRYPT_MODE, metadata, chunkIndex).doFinal(encryptedChunk);
     }
 
-    private byte[] decryptChunk(Path filePath, Metadata metadata, long chunkIndex) throws Exception {
-        try (RandomAccessFile randomAccessFile = new RandomAccessFile(filePath.toFile(), "r")) {
-            return decryptChunk(randomAccessFile, metadata, chunkIndex);
-        }
+    private long getEncryptedChunkOffset(long chunkIndex) {
+        return chunkIndex * (STREAM_CHUNK_SIZE + GCM_TAG_SIZE);
+    }
+
+    private int getEncryptedChunkLength(Metadata metadata, long chunkIndex) {
+        long chunkStart = chunkIndex * STREAM_CHUNK_SIZE;
+        int plaintextLength = (int) Math.min(STREAM_CHUNK_SIZE, metadata.getFileSize() - chunkStart);
+        return plaintextLength + GCM_TAG_SIZE;
     }
 
     private byte[] getAuthenticatedData(String fileUUID, long fileSize, long chunkIndex) {

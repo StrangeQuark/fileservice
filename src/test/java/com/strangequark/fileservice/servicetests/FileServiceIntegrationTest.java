@@ -12,7 +12,7 @@ import java.util.UUID;
 
 @SpringBootTest(properties = {"authservice.integration=false", "telemetryservice.integration=false", "SERVICE_SECRET_FILE=test"})
 @ActiveProfiles("test")
-public class FileServiceIntegrationTest {
+public class FileServiceIntegrationTest extends BaseStorageTest {
     static {
         System.setProperty("ENCRYPTION_KEY", "AA1A2A8C0E4F76FB3C13F66225AAAC42");
     }

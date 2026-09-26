@@ -6,23 +6,23 @@ import com.strangequark.fileservice.collectionuser.CollectionUserRequest;
 import com.strangequark.fileservice.collectionuser.CollectionUserRole;
 import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.response.UploadResponse;
+import com.strangequark.fileservice.storage.S3FileStorage;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -30,9 +30,12 @@ import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 public class FileServiceTest extends BaseServiceTest {
+    @MockitoSpyBean
+    private S3FileStorage s3FileStorage;
 
     @Test
     void getAllFilesTest() {
@@ -48,36 +51,27 @@ public class FileServiceTest extends BaseServiceTest {
         LOGGER.info("Begin deleteFileTest");
 
         Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
-        Path filePath = uploadDir.resolve(metadata.getFileUUID());
-
         ResponseEntity<?> response = fileService.deleteFile(collectionName, fileName);
 
         Assertions.assertEquals(200, response.getStatusCode().value());
         Assertions.assertTrue(metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).isEmpty());
-        Assertions.assertFalse(Files.exists(filePath));
+        Assertions.assertFalse(s3FileStorage.exists(metadata.getFileUUID()));
         Assertions.assertEquals(0, fileDeletionRepository.count());
     }
 
     @Test
     void failedFileDeletionIsRetriedTest() throws Exception {
         Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
-        Path originalFilePath = uploadDir.resolve(metadata.getFileUUID());
-        Path directoryPath = uploadDir.resolve("failedDelete");
-
-        Files.createDirectories(directoryPath);
-        Files.writeString(directoryPath.resolve("file.txt"), "data");
-        Files.deleteIfExists(originalFilePath);
-
         metadata.setFileUUID("failedDelete");
         metadataRepository.saveAndFlush(metadata);
+        doThrow(new RuntimeException("Failed to delete file"))
+                .doCallRealMethod()
+                .when(s3FileStorage).delete("failedDelete");
 
         ResponseEntity<?> response = fileService.deleteFile(collectionName, fileName);
 
         Assertions.assertEquals(200, response.getStatusCode().value());
         Assertions.assertEquals(1, fileDeletionRepository.count());
-
-        Files.deleteIfExists(directoryPath.resolve("file.txt"));
-        Files.deleteIfExists(directoryPath);
 
         fileService.reconcileFiles();
 
@@ -86,22 +80,21 @@ public class FileServiceTest extends BaseServiceTest {
 
     @Test
     void reconcileFilesDeletesOrphanedFileTest() throws Exception {
-        Path orphanedFilePath = uploadDir.resolve("orphanedFile.tmp");
-
-        Files.writeString(orphanedFilePath, "orphaned data");
-        Files.setLastModifiedTime(orphanedFilePath,
-                FileTime.fromMillis(System.currentTimeMillis() - 3600001));
+        Path temporaryFile = s3FileStorage.createTemporaryFile();
+        Files.writeString(temporaryFile, "orphaned data");
+        s3FileStorage.store("orphanedFile.tmp", temporaryFile);
+        Files.deleteIfExists(temporaryFile);
 
         fileService.reconcileFiles();
 
-        Assertions.assertFalse(Files.exists(orphanedFilePath));
+        Assertions.assertFalse(s3FileStorage.exists("orphanedFile.tmp"));
     }
 
     @Test
     void reconcileFilesReportsMissingPhysicalFileTest() throws Exception {
         Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
 
-        Files.deleteIfExists(uploadDir.resolve(metadata.getFileUUID()));
+        s3FileStorage.delete(metadata.getFileUUID());
         fileService.reconcileFiles();
 
         Assertions.assertTrue(metadataRepository
@@ -112,6 +105,11 @@ public class FileServiceTest extends BaseServiceTest {
     @Test
     void downloadFileTest() throws Exception {
         LOGGER.info("Begin downloadFileTest");
+
+        Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
+        try(InputStream inputStream = s3FileStorage.read(metadata.getFileUUID())) {
+            Assertions.assertEquals(metadata.getFileSize() + 16, inputStream.readAllBytes().length);
+        }
 
         ResponseEntity<StreamingResponseBody> response = fileService.downloadFile(collectionName, fileName);
 
@@ -195,7 +193,7 @@ public class FileServiceTest extends BaseServiceTest {
         Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
         ResponseEntity<StreamingResponseBody> response = fileService.downloadAllFiles(collectionName);
 
-        Files.delete(uploadDir.resolve(metadata.getFileUUID()));
+        s3FileStorage.delete(metadata.getFileUUID());
 
         Assertions.assertThrows(IOException.class,
                 () -> response.getBody().writeTo(new ByteArrayOutputStream()));
@@ -250,7 +248,7 @@ public class FileServiceTest extends BaseServiceTest {
                     .orElse(null);
 
             if(metadata != null) {
-                Files.deleteIfExists(uploadDir.resolve(metadata.getFileUUID()));
+                s3FileStorage.delete(metadata.getFileUUID());
                 metadataRepository.delete(metadata);
             }
         }
@@ -259,10 +257,16 @@ public class FileServiceTest extends BaseServiceTest {
     @Test
     void streamFileRejectsModifiedEncryptedFileTest() throws Exception {
         Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
-        byte[] encryptedFile = Files.readAllBytes(uploadDir.resolve(metadata.getFileUUID()));
+        byte[] encryptedFile;
+        try(InputStream inputStream = s3FileStorage.read(metadata.getFileUUID())) {
+            encryptedFile = inputStream.readAllBytes();
+        }
 
         encryptedFile[0] ^= 1;
-        Files.write(uploadDir.resolve(metadata.getFileUUID()), encryptedFile);
+        Path temporaryFile = s3FileStorage.createTemporaryFile();
+        Files.write(temporaryFile, encryptedFile);
+        s3FileStorage.store(metadata.getFileUUID(), temporaryFile);
+        Files.deleteIfExists(temporaryFile);
 
         ResponseEntity<?> response = fileService.streamFile(collectionName, fileName, "");
 
@@ -300,7 +304,7 @@ public class FileServiceTest extends BaseServiceTest {
                     (byte[]) response.getBody()
             );
         } finally {
-            Files.deleteIfExists(uploadDir.resolve(metadata.getFileUUID()));
+            s3FileStorage.delete(metadata.getFileUUID());
             metadataRepository.delete(metadata);
         }
     }
@@ -329,10 +333,9 @@ public class FileServiceTest extends BaseServiceTest {
                     return new RuntimeException("Unable to find metadata");
                 });
 
-        File file = uploadDir.resolve(meta.getFileUUID()).toFile();
         metadataRepository.delete(meta);
 
-        Assertions.assertTrue(file.delete());
+        s3FileStorage.delete(meta.getFileUUID());
         LOGGER.info("uploadFileTest cleanup successful");
     }
 
@@ -340,10 +343,7 @@ public class FileServiceTest extends BaseServiceTest {
     void failedUploadDeletesTemporaryFileTest() throws Exception {
         LOGGER.info("Begin failedUploadDeletesTemporaryFileTest");
 
-        long filesBefore;
-        try (var files = Files.list(uploadDir)) {
-            filesBefore = files.count();
-        }
+        long filesBefore = s3FileStorage.list().size();
 
         MultipartFile failingFile = org.mockito.Mockito.mock(MultipartFile.class);
         org.mockito.Mockito.when(failingFile.getOriginalFilename()).thenReturn("failedUpload.txt");
@@ -375,9 +375,7 @@ public class FileServiceTest extends BaseServiceTest {
                 .findByCollectionIdAndFileName(collection.getId(), "failedUpload.txt")
                 .isEmpty());
 
-        try (var files = Files.list(uploadDir)) {
-            Assertions.assertEquals(filesBefore, files.count());
-        }
+        Assertions.assertEquals(filesBefore, s3FileStorage.list().size());
     }
 
     @Test
@@ -537,7 +535,7 @@ public class FileServiceTest extends BaseServiceTest {
 
         Assertions.assertEquals(200, response.getStatusCode().value());
         Assertions.assertTrue(collectionRepository.findByName(collectionName).isEmpty());
-        Assertions.assertFalse(Files.exists(uploadDir.resolve(metadata.getFileUUID())));
+        Assertions.assertFalse(s3FileStorage.exists(metadata.getFileUUID()));
     }
 
     @Test
