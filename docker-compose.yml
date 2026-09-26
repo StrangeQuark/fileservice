@@ -12,15 +12,16 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    tmpfs:
-      - /tmp
     labels:
       com.msinit.log: "true"
       com.msinit.service-name: "fileservice"
     depends_on:
-      - file-db
+      file-db:
+        condition: service_started
+      seaweedfs:
+        condition: service_healthy
     volumes:
-      - file-storage-volume:${FILE_STORAGE_PATH}
+      - file-upload-temp-volume:/tmp
     environment:
       - SPRING_APPLICATION_NAME=${SPRING_APPLICATION_NAME}
       - SERVER_PORT=${SERVER_PORT}
@@ -39,7 +40,11 @@ services:
       - SPRING_SERVLET_MULTIPART_ENABLED=${SPRING_SERVLET_MULTIPART_ENABLED}
       - SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE=${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE}
       - SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE=${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE}
-      - FILE_STORAGE_PATH=${FILE_STORAGE_PATH}
+      - FILE_STORAGE_ENDPOINT=${FILE_STORAGE_ENDPOINT}
+      - FILE_STORAGE_REGION=${FILE_STORAGE_REGION}
+      - FILE_STORAGE_BUCKET=${FILE_STORAGE_BUCKET}
+      - FILE_STORAGE_ACCESS_KEY=${FILE_STORAGE_ACCESS_KEY}
+      - FILE_STORAGE_SECRET_KEY=${FILE_STORAGE_SECRET_KEY}
       - FILE_DELETION_RETRY_DELAY=${FILE_DELETION_RETRY_DELAY}
       - FILE_RECONCILIATION_MIN_AGE=${FILE_RECONCILIATION_MIN_AGE}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
@@ -65,6 +70,29 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.80
+    container_name: seaweedfs
+    restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -c
+    command:
+      - |
+        printf '{"identities":[{"name":"fileservice","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}' "$${FILE_STORAGE_ACCESS_KEY}" "$${FILE_STORAGE_SECRET_KEY}" > /tmp/s3.json
+        exec /usr/bin/weed -logtostderr=true server -dir=/data -volume.max=0 -master.volumePreallocate -master.volumeSizeLimitMB=1024 -s3 -s3.port=8333 -s3.config=/tmp/s3.json
+    networks:
+      - filedb-network
+    volumes:
+      - seaweedfs-data:/data
+    environment:
+      - FILE_STORAGE_ACCESS_KEY=${FILE_STORAGE_ACCESS_KEY}
+      - FILE_STORAGE_SECRET_KEY=${FILE_STORAGE_SECRET_KEY}
+    healthcheck:
+      test: [ "CMD-SHELL", "nc -z 127.0.0.1 8333" ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
 networks:
   filedb-network:
     internal: true
@@ -72,4 +100,5 @@ networks:
     external: true
 volumes:
   file-db-volume:
-  file-storage-volume:
+  file-upload-temp-volume:
+  seaweedfs-data:

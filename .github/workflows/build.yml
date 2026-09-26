@@ -45,6 +45,9 @@ jobs:
             echo "Environment variables written to fileservice.env"
           fi
 
+      - name: Run tests
+        run: ./mvnw clean test
+
       - name: Deploy & Health Check
         run: |
           set -e

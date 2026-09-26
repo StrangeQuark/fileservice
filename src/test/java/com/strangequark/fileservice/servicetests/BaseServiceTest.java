@@ -7,8 +7,8 @@ import com.strangequark.fileservice.collectionuser.CollectionUserRepository;
 import com.strangequark.fileservice.collectionuser.CollectionUserRole;
 import com.strangequark.fileservice.filedeletion.FileDeletionRepository;
 import com.strangequark.fileservice.file.FileService;
-import com.strangequark.fileservice.metadata.Metadata;
 import com.strangequark.fileservice.metadata.MetadataRepository;
+import com.strangequark.fileservice.storage.S3FileStorage;
 import com.strangequark.fileservice.utility.AuthUtility;
 import com.strangequark.fileservice.utility.JwtUtility;
 import org.junit.jupiter.api.AfterEach;
@@ -22,10 +22,6 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-import java.io.File;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.Mockito.when;
@@ -33,7 +29,7 @@ import static org.mockito.Mockito.when;
 @SpringBootTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ActiveProfiles("test")
-public abstract class BaseServiceTest {
+public abstract class BaseServiceTest extends BaseStorageTest {
     static {
         System.setProperty("ENCRYPTION_KEY", "AA1A2A8C0E4F76FB3C13F66225AAAC42");
     }
@@ -58,10 +54,10 @@ public abstract class BaseServiceTest {
     public MockMultipartFile mockMultipartFile;
     public String collectionName;
     public final String fileName = "testFile.txt";
-    public final Path uploadDir = Paths.get("uploads");
-
     @Autowired
     public FileService fileService;
+    @Autowired
+    public S3FileStorage s3FileStorage;
 
     @BeforeEach
     void setup() {
@@ -86,13 +82,9 @@ public abstract class BaseServiceTest {
     void teardown() {
         LOGGER.info("Attempting test teardown");
         try {
-            Optional<Metadata> metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName);
-            metadata.ifPresent(meta -> {
-                File file = uploadDir.resolve(meta.getFileUUID()).toFile();
-                file.delete();
-                metadataRepository.deleteAll();
-                LOGGER.info("File and metadata successful teardown");
-            });
+            metadataRepository.findAll().forEach(metadata -> s3FileStorage.delete(metadata.getFileUUID()));
+            metadataRepository.deleteAll();
+            LOGGER.info("File and metadata successful teardown");
         } catch (Exception ex) {
             LOGGER.error("Exception when attempting to clean up metadata repository and delete file during testing");
             LOGGER.error(ex.getMessage());
