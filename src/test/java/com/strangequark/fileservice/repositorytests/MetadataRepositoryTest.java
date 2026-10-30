@@ -6,6 +6,8 @@ import com.strangequark.fileservice.metadata.MetadataRepository;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.actuate.autoconfigure.observation.ObservationAutoConfiguration;
+import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
@@ -17,6 +19,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @DataJpaTest
+@ImportAutoConfiguration(ObservationAutoConfiguration.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ActiveProfiles("test")
 public class MetadataRepositoryTest {

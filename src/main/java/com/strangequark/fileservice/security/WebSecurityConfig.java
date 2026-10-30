@@ -64,8 +64,8 @@ public class WebSecurityConfig {
                 registry.addMapping("/**")
                         .allowedOrigins(allowedOrigins)
                         .allowedMethods("GET", "POST", "DELETE")
-                        .allowedHeaders("Authorization", "Content-Type", "Range")
-                        .exposedHeaders("Accept-Ranges", "Content-Range", "Content-Length", "Content-Type", "Content-Disposition")
+                        .allowedHeaders("Authorization", "Content-Type", "Range", "traceparent", "tracestate")
+                        .exposedHeaders("Accept-Ranges", "Content-Range", "Content-Length", "Content-Type", "Content-Disposition", "X-Trace-ID")
                         .allowCredentials(true);
             }
         };
