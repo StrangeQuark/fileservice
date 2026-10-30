@@ -16,6 +16,7 @@ import com.strangequark.fileservice.storage.S3FileStorage;
 import com.strangequark.fileservice.utility.AuthUtility;
 import com.strangequark.fileservice.utility.JwtUtility;
 import com.strangequark.fileservice.utility.TelemetryUtility;
+import com.strangequark.fileservice.utility.TraceUtility;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,6 +83,8 @@ public class FileService {
     AuthUtility authUtility;
     @Autowired
     TelemetryUtility telemetryUtility;
+    @Autowired
+    private TraceUtility traceUtility;
 
     public FileService(MetadataRepository metadataRepository, CollectionRepository collectionRepository,
                        FileDeletionRepository fileDeletionRepository, ApplicationEventPublisher applicationEventPublisher,
@@ -245,14 +248,14 @@ public class FileService {
             validateCollectionAccess(collection);
 
             Metadata metadata = metadataRepository.findByCollectionIdAndFileName(collection.getId(), fileName).get();
-            StreamingResponseBody stream = outputStream -> {
+            StreamingResponseBody stream = traceUtility.wrapStream(outputStream -> {
                 try {
                     writeDecryptedFile(metadata, outputStream);
                 } catch(Exception ex) {
                     LOGGER.error("Failed to decrypt file: " + ex.getMessage());
                     throw new IOException("File download failed", ex);
                 }
-            };
+            });
             sendTelemetryEvent("file-download", Map.of(
                             "userId", getUserId(),
                             "collection-id", collection.getId(),
@@ -300,7 +303,7 @@ public class FileService {
             for(Metadata metadataItem : metadata)
                 zipEntryNames.add(getZipEntryName(metadataItem.getFileName(), usedZipEntryNames));
 
-            StreamingResponseBody stream = outputStream -> {
+            StreamingResponseBody stream = traceUtility.wrapStream(outputStream -> {
                 try(ZipOutputStream zip = new ZipOutputStream(outputStream)) {
                     for (int i = 0; i < metadata.size(); i++) {
                         Metadata metadataItem = metadata.get(i);
@@ -317,7 +320,7 @@ public class FileService {
                     LOGGER.debug("Stack trace: ", ex);
                     throw new IOException("File download failed", ex);
                 }
-            };
+            });
             sendTelemetryEvent("file-download", Map.of(
                             "userId", getUserId(),
                             "collection-id", collection.getId(),

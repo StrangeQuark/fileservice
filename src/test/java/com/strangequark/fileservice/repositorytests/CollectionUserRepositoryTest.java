@@ -7,6 +7,8 @@ import com.strangequark.fileservice.collectionuser.CollectionUserRole;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.actuate.autoconfigure.observation.ObservationAutoConfiguration;
+import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -15,6 +17,7 @@ import java.util.List;
 import java.util.UUID;
 
 @DataJpaTest
+@ImportAutoConfiguration(ObservationAutoConfiguration.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ActiveProfiles("test")
 public class CollectionUserRepositoryTest {
