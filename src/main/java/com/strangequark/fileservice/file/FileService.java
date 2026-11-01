@@ -699,6 +699,10 @@ public class FileService {
                 throw new RuntimeException("Only collection OWNERs and MANAGERs can add new users.");
             }
 
+            if (collectionUserRequest.getRole() == CollectionUserRole.OWNER && requestingUser.getRole() != CollectionUserRole.OWNER) {
+                throw new RuntimeException("Only OWNERs can promote other users to OWNER");
+            }
+
             // Ensure the target user exists
             String userIdStr = authUtility.getUserId(collectionUserRequest.getUsername());
             if (userIdStr == null) {
